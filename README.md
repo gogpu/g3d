@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Pure Go 3D rendering library</strong><br>
-  Scene graph, PBR materials, GLTF loading. Zero CGO.<br>
+  Scene graph, PBR materials, forward renderer. Zero CGO.<br>
   Built on <a href="https://github.com/gogpu/wgpu">gogpu/wgpu</a> (Vulkan/Metal/DX12/GLES/Software).
 </p>
 
@@ -26,7 +26,7 @@
 
 ## What is g3d?
 
-g3d is a **3D rendering library** — not a game engine. It provides the building blocks (scene graph, cameras, lights, materials, mesh loading) that game engines, CAD viewers, data visualizers, and AR/VR applications build upon.
+g3d is a **3D rendering library** — not a game engine. It provides the building blocks (scene graph, cameras, lights, materials, geometry primitives) that game engines, CAD viewers, data visualizers, and AR/VR applications build upon.
 
 Think of it like [Three.js](https://threejs.org/) for Go: simple API, powerful rendering, zero opinion about your application architecture.
 
@@ -34,63 +34,105 @@ Think of it like [Three.js](https://threejs.org/) for Go: simple API, powerful r
 package main
 
 import (
-    "github.com/gogpu/gogpu"
+    "log"
+
     "github.com/gogpu/g3d"
+    "github.com/gogpu/gogpu"
 )
 
 func main() {
-    app := gogpu.NewApp(gogpu.Config{Title: "g3d Hello", Width: 800, Height: 600})
-    renderer := g3d.NewRenderer(app)
+    app := gogpu.NewApp(gogpu.DefaultConfig().
+        WithTitle("g3d Hello Cube").
+        WithSize(800, 600))
 
     scene := g3d.NewScene()
-    scene.Add(g3d.NewAmbientLight(g3d.White, 0.3))
-    scene.Add(g3d.NewDirectionalLight(g3d.White, 1.0))
+    scene.SetBackground(g3d.RGB(0.1, 0.1, 0.15))
 
-    cube := g3d.NewMesh(g3d.NewBoxGeometry(1, 1, 1), g3d.NewStandardMaterial())
-    scene.Add(cube)
+    // Ambient light (no spatial properties — attached via UserData on a container node)
+    ambient := g3d.NewAmbientLight(g3d.WithLightColor(g3d.White), g3d.WithLightIntensity(0.3))
+    ambientNode := g3d.NewNode()
+    ambientNode.SetUserData(ambient)
+    scene.Add(ambientNode)
 
+    // Directional light (sun-like, from upper-right)
+    sun := g3d.NewDirectionalLight(g3d.WithLightColor(g3d.White), g3d.WithLightIntensity(1.0))
+    sun.LightNode().SetRotation(g3d.Euler{X: g3d.Radians(-45), Y: g3d.Radians(30)})
+    scene.Add(sun.LightNode())
+
+    // Cube mesh with PBR material
+    cube := g3d.NewMesh(
+        g3d.NewBoxGeometry(1, 1, 1),
+        g3d.NewStandardMaterial(
+            g3d.WithColor(g3d.RGB(0.4, 0.7, 1.0)),
+            g3d.WithRoughness(0.6),
+        ),
+    )
+    scene.Add(cube.MeshNode())
+
+    // Camera
     camera := g3d.NewPerspectiveCamera(75, 800.0/600.0, 0.1, 1000)
-    camera.Position = g3d.Vec3{0, 0, 3}
+    camera.CameraNode().SetPosition(g3d.Vec3{X: 0, Y: 0.5, Z: 3})
+
+    var renderer *g3d.Renderer
 
     app.OnUpdate(func(dt float64) {
-        cube.Rotation.Y += float32(dt)
+        r := cube.MeshNode().Rotation
+        r.Y += float32(dt)
+        cube.MeshNode().SetRotation(r)
     })
-    app.OnDraw(func(_ *gogpu.Context) {
-        renderer.Render(scene, camera)
+    app.OnDraw(func(ctx *gogpu.Context) {
+        if renderer == nil {
+            var err error
+            renderer, err = g3d.NewRenderer(app.GPUContextProvider())
+            if err != nil {
+                log.Fatal(err)
+            }
+        }
+        fbW, fbH := ctx.FramebufferSize()
+        renderer.SetSize(uint32(fbW), uint32(fbH))
+        if view := ctx.SurfaceView(); view != nil {
+            _ = renderer.Render(scene, camera, view)
+        }
     })
-    app.Run()
+    app.OnClose(func() {
+        if renderer != nil {
+            renderer.Release()
+        }
+    })
+    if err := app.Run(); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 
 ## Features
 
-### Core
-- **Scene graph** — hierarchical Node tree with parent-child transform propagation
-- **Cameras** — Perspective and Orthographic with configurable clip planes
-- **Geometries** — Box, Sphere, Plane, Cylinder, Cone, Torus + custom BufferGeometry
-- **Renderer** — Forward rendering with 3-bucket sorting (opaque, alpha mask, transparent)
-- **Frustum culling** — automatic visibility testing against camera frustum
+### Core (v0.1.0)
+- **Scene graph** — hierarchical Node tree with parent-child transform propagation and dirty flags
+- **Cameras** — Perspective and Orthographic with frustum extraction
+- **Geometries** — Box, Sphere, Plane + custom BufferGeometry
+- **Forward renderer** — 4-bucket sorting (background, opaque, transmissive, transparent)
+- **Frustum culling** — automatic AABB visibility testing against camera frustum
 
-### Materials
+### Materials (v0.1.0)
 - **BasicMaterial** — unlit, for prototyping and data visualization
-- **StandardMaterial** — PBR metallic-roughness (GLTF standard), production quality
-- **ShaderMaterial** — custom WGSL shaders for advanced users
+- **StandardMaterial** — PBR metallic-roughness with Blinn-Phong shading
 
-### Lighting
-- **DirectionalLight** — sun-like parallel light with shadow mapping
-- **PointLight** — omnidirectional light with distance attenuation
-- **SpotLight** — focused cone light with soft edges
+### Lighting (v0.1.0)
 - **AmbientLight** — uniform environment lighting
+- **DirectionalLight** — sun-like parallel light
 
-### Loading
-- **GLTF 2.0** — binary (.glb) and JSON (.gltf) with PBR materials, animations, scene hierarchy
-- **Textures** — PNG, JPEG, HDR for environment maps
-
-### Performance
+### Performance (v0.1.0)
 - **Zero-alloc render path** — no GC pressure during frame rendering
-- **Instance batching** — thousands of objects with minimal draw calls
-- **Pipeline specialization cache** — compile shader variants once, reuse forever
-- **4-level draw grouping** — RenderPass → Pipeline → Material → Mesh → Instances
+- **Pipeline cache** — compile shader variants once, reuse forever
+- **3-key opaque sort** — PipelineKey → MaterialID → Distance (minimizes GPU state changes)
+- **MappedAtCreation** — zero-copy GPU buffer upload (WebGPU compliant)
+
+### Planned
+- **Full PBR** — Cook-Torrance BRDF, shadow mapping, normal maps (Phase 2)
+- **GLTF 2.0** — binary (.glb) and JSON (.gltf) with PBR materials, animations (Phase 3)
+- **Instance batching** — thousands of objects with minimal draw calls (Phase 4)
+- **Post-processing** — bloom, tone mapping, FXAA (Phase 4)
 
 ## Not a Game Engine
 
@@ -100,7 +142,7 @@ g3d deliberately does **not** include:
 |---------|---------|----------------|
 | Entity Component System | Game engine concern | Build on top, or use external ECS |
 | Physics | Simulation concern | Integrate Bullet, ODE, or Pure Go physics |
-| Audio | Unrelated to rendering | Use Oto, Beep, or platform audio |
+| Audio | Unrelated to rendering | Use [gogpu/audio](https://github.com/gogpu/audio) or Oto |
 | Networking | Unrelated to rendering | Use net/http, gRPC, WebSocket |
 | Scripting | Engine concern | Use Lua/Wasm/Yaegi on top |
 | Scene editor | Tool concern | Build with gogpu/ui + g3d |
@@ -117,9 +159,16 @@ g3d renders through [gogpu/wgpu](https://github.com/gogpu/wgpu), which supports:
 | **Metal** | macOS | Stable |
 | **DirectX 12** | Windows | Stable |
 | **OpenGL ES** | Windows, Linux | Stable |
-| **Software** | All | Fallback |
+| **Software** | All | Fallback (CI/testing) |
 
 All backends are Pure Go — zero CGO, single binary deployment.
+
+```bash
+# Select backend via environment variable
+GOGPU_GRAPHICS_API=vulkan   go run ./examples/hello-cube/
+GOGPU_GRAPHICS_API=dx12     go run ./examples/hello-cube/
+GOGPU_GRAPHICS_API=software go run ./examples/hello-cube/
+```
 
 ## Standalone Usage
 
@@ -127,12 +176,11 @@ g3d works without the gogpu application framework. Bring your own window and GPU
 
 ```go
 // Use g3d with any wgpu.Device — no gogpu dependency required
-device, queue := myCustomGPUSetup()
-renderer := g3d.NewRendererFromDevice(device, queue)
+renderer, err := g3d.NewRendererFromDevice(device, queue, surfaceFormat)
 
 scene := g3d.NewScene()
 // ... build your scene
-renderer.Render(scene, camera)
+renderer.Render(scene, camera, targetView)
 ```
 
 ## Architecture
@@ -140,14 +188,16 @@ renderer.Render(scene, camera)
 ```
 Your Application (game engine, CAD viewer, data viz, AR/VR)
          |
-    gogpu/g3d  — Scene Graph + PBR + GLTF + Render Pipeline
+    gogpu/g3d  — Scene Graph + Materials + Render Pipeline
          |
-    gogpu/wgpu — Pure Go WebGPU (Vulkan/Metal/DX12/GLES)
+    gogpu/wgpu — Pure Go WebGPU (Vulkan/Metal/DX12/GLES/Software)
          |
     gogpu/naga — Shader Compiler (WGSL → SPIR-V/MSL/GLSL/HLSL)
 ```
 
 g3d depends **down** (wgpu, naga), never **up** (gogpu, gg, ui). This ensures it can be used in any context.
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for full architecture documentation.
 
 ## Installation
 
@@ -161,15 +211,15 @@ go get github.com/gogpu/g3d
 
 | Phase | Features | Status |
 |-------|----------|--------|
-| **Phase 1** | Scene graph, cameras, basic materials, box/sphere/plane, renderer | Planned |
-| **Phase 2** | PBR lighting, shadows, StandardMaterial, normal maps | Planned |
+| **Phase 1** | Scene graph, cameras, materials, box/sphere/plane, forward renderer | **Complete** |
+| **Phase 2** | Full PBR (Cook-Torrance), shadows, normal maps, textures | Planned |
 | **Phase 3** | GLTF 2.0 loader, skeletal animation, morph targets | Planned |
 | **Phase 4** | Instance batching, environment maps, post-processing, skybox | Planned |
-| **Phase 5** | Frustum culling BVH, LOD, SIMD math, pipeline cache | Planned |
+| **Phase 5** | Frustum culling BVH, LOD, SIMD math | Planned |
 
 ## Design Principles
 
-1. **Simple API** — 15 lines for a lit rotating cube. Progressive complexity.
+1. **Simple API** — rotating lit cube in ~20 lines. Progressive complexity.
 2. **Zero CGO** — Pure Go on all platforms. Single binary deployment.
 3. **Reusable** — rendering library, not a framework. No opinions about your architecture.
 4. **PBR from day one** — metallic-roughness workflow, GLTF standard.
@@ -178,17 +228,11 @@ go get github.com/gogpu/g3d
 
 ## Contributing
 
-We welcome contributions! Priority areas:
-
-1. **GLTF loading** — parser and material mapping
-2. **Shader development** — PBR, shadows, post-processing in WGSL
-3. **Geometry primitives** — additional built-in shapes
-4. **Examples** — showcase real-world usage
-5. **Testing** — cross-platform GPU rendering tests
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, code standards, and priority areas.
 
 ## Part of the GoGPU Ecosystem
 
-g3d is part of [GoGPU](https://github.com/gogpu) — a Pure Go GPU computing ecosystem with 632K+ lines of code.
+g3d is part of [GoGPU](https://github.com/gogpu) — a Pure Go GPU computing ecosystem with 800K+ lines of code.
 
 | Library | Purpose |
 |:--------|:--------|
@@ -199,6 +243,7 @@ g3d is part of [GoGPU](https://github.com/gogpu) — a Pure Go GPU computing eco
 | **[g3d](https://github.com/gogpu/g3d)** | **3D rendering (this library)** |
 | [ui](https://github.com/gogpu/ui) | GUI toolkit (22+ widgets, 4 themes) |
 | [systray](https://github.com/gogpu/systray) | System tray (Win32/macOS/Linux) |
+| [audio](https://github.com/gogpu/audio) | Pure Go audio engine (WASAPI) |
 
 ## License
 

@@ -1,0 +1,61 @@
+# CODEOWNERS for gogpu/g3d
+# https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+#
+# Code owners are automatically requested for review when someone opens a pull request
+# that modifies code they own.
+
+# Default owner for everything in the repo
+* @kolkov
+
+# Core API files — Breaking changes require careful review
+/renderer.go @kolkov
+/camera.go @kolkov
+/material.go @kolkov
+/geometry.go @kolkov
+/node.go @kolkov
+/scene.go @kolkov
+/mesh.go @kolkov
+/light.go @kolkov
+
+# Math types — Foundation, changes affect everything
+/math.go @kolkov
+/matrix.go @kolkov
+/quaternion.go @kolkov
+/frustum.go @kolkov
+/color.go @kolkov
+
+# Concrete implementations
+/camera_perspective.go @kolkov
+/camera_orthographic.go @kolkov
+/material_basic.go @kolkov
+/material_standard.go @kolkov
+/light_ambient.go @kolkov
+/light_directional.go @kolkov
+/geometry_box.go @kolkov
+/geometry_sphere.go @kolkov
+/geometry_plane.go @kolkov
+
+# Internal packages
+/internal/ @kolkov
+
+# WGSL shaders — GPU pipeline critical
+/internal/gpu/shaders/ @kolkov
+
+# Examples
+/examples/ @kolkov
+
+# Documentation
+*.md @kolkov
+
+# GitHub configuration and CI/CD
+/.github/ @kolkov
+
+# Code quality and linting configuration
+/.golangci.yml @kolkov
+
+# Tests
+*_test.go @kolkov
+
+# Go module files — Dependency management
+/go.mod @kolkov
+/go.sum @kolkov
