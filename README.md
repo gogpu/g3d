@@ -10,7 +10,7 @@
 
 <p align="center">
   <strong>Pure Go 3D rendering library</strong><br>
-  Scene graph, PBR materials, forward rendering. Zero CGO.<br>
+  Scene graph, PBR materials, forward renderer. Zero CGO.<br>
   Built on <a href="https://github.com/gogpu/wgpu">gogpu/wgpu</a> (Vulkan/Metal/DX12/GLES/Software).
 </p>
 
@@ -35,53 +35,73 @@ package main
 
 import (
     "log"
-    "math"
 
     "github.com/gogpu/g3d"
     "github.com/gogpu/gogpu"
 )
 
 func main() {
-    app := gogpu.NewApp(gogpu.WithTitle("g3d Hello Cube"), gogpu.WithSize(800, 600))
+    app := gogpu.NewApp(gogpu.DefaultConfig().
+        WithTitle("g3d Hello Cube").
+        WithSize(800, 600))
 
     scene := g3d.NewScene()
+    scene.SetBackground(g3d.RGB(0.1, 0.1, 0.15))
 
-    // Lights
+    // Ambient light (no spatial properties — attached via UserData on a container node)
+    ambient := g3d.NewAmbientLight(g3d.WithLightColor(g3d.White), g3d.WithLightIntensity(0.3))
     ambientNode := g3d.NewNode()
-    ambientNode.SetUserData(g3d.NewAmbientLight(g3d.White, 0.3))
+    ambientNode.SetUserData(ambient)
     scene.Add(ambientNode)
 
-    dirLight := g3d.NewDirectionalLight(g3d.White, 1.0)
-    scene.Add(dirLight.LightNode())
+    // Directional light (sun-like, from upper-right)
+    sun := g3d.NewDirectionalLight(g3d.WithLightColor(g3d.White), g3d.WithLightIntensity(1.0))
+    sun.LightNode().SetRotation(g3d.Euler{X: g3d.Radians(-45), Y: g3d.Radians(30)})
+    scene.Add(sun.LightNode())
 
     // Cube mesh with PBR material
     cube := g3d.NewMesh(
         g3d.NewBoxGeometry(1, 1, 1),
-        g3d.NewStandardMaterial(g3d.WithColor(g3d.Color{0.4, 0.7, 1.0, 1.0})),
+        g3d.NewStandardMaterial(
+            g3d.WithColor(g3d.RGB(0.4, 0.7, 1.0)),
+            g3d.WithRoughness(0.6),
+        ),
     )
     scene.Add(cube.MeshNode())
 
     // Camera
     camera := g3d.NewPerspectiveCamera(75, 800.0/600.0, 0.1, 1000)
-    camera.CameraNode().SetPosition(g3d.Vec3{0, 1, 3})
+    camera.CameraNode().SetPosition(g3d.Vec3{X: 0, Y: 0.5, Z: 3})
 
     var renderer *g3d.Renderer
-    var angle float32
 
+    app.OnUpdate(func(dt float64) {
+        r := cube.MeshNode().Rotation
+        r.Y += float32(dt)
+        cube.MeshNode().SetRotation(r)
+    })
     app.OnDraw(func(ctx *gogpu.Context) {
         if renderer == nil {
             var err error
-            renderer, err = g3d.NewRenderer(ctx.GPUContextProvider())
+            renderer, err = g3d.NewRenderer(app.GPUContextProvider())
             if err != nil {
                 log.Fatal(err)
             }
-            renderer.SetSize(uint32(ctx.Width()), uint32(ctx.Height()))
         }
-        angle += float32(ctx.DeltaTime())
-        cube.MeshNode().SetRotation(g3d.Euler{0, angle, 0})
-        _ = renderer.Render(scene, camera, ctx.SurfaceView())
+        fbW, fbH := ctx.FramebufferSize()
+        renderer.SetSize(uint32(fbW), uint32(fbH))
+        if view := ctx.SurfaceView(); view != nil {
+            _ = renderer.Render(scene, camera, view)
+        }
     })
-    app.Run()
+    app.OnClose(func() {
+        if renderer != nil {
+            renderer.Release()
+        }
+    })
+    if err := app.Run(); err != nil {
+        log.Fatal(err)
+    }
 }
 ```
 

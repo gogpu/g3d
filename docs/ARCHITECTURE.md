@@ -42,7 +42,7 @@ g3d is a Pure Go 3D rendering library — not a game engine. It provides scene g
 ## Package Structure
 
 ```
-g3d/                              Root package — public API (~30 exported types)
+g3d/                              Root package — public API (~38 exported types)
 │
 ├── Math types                    Vec2, Vec3, Vec4, Mat4, Quat, Euler, Color
 ├── Scene graph                   Node, Scene, Group, Mesh

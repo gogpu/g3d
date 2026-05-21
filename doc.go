@@ -1,6 +1,6 @@
 // Package g3d is a Pure Go 3D rendering library built on gogpu/wgpu.
 //
-// g3d provides a scene graph, PBR materials, cameras, lights, GLTF loading,
+// g3d provides a scene graph, PBR materials, cameras, lights, geometry primitives,
 // and a forward rendering pipeline with zero CGO dependencies. It is designed
 // as a reusable foundation — not a game engine — so that game engines, CAD viewers,
 // data visualizers, and AR/VR applications can build on top of it.
