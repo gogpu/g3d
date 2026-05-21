@@ -48,7 +48,7 @@ func NewStandardMaterial(opts ...MaterialOption) *StandardMaterial {
 }
 
 // ShaderID returns "standard", identifying the PBR shader pipeline.
-func (m *StandardMaterial) ShaderID() string { return "standard" }
+func (m *StandardMaterial) ShaderID() string { return shaderStandard }
 
 // RenderBucket returns the appropriate bucket based on AlphaMode:
 //   - AlphaModeOpaque, AlphaModeMask -> RenderBucketOpaque

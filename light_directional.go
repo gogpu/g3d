@@ -31,6 +31,8 @@ func NewDirectionalLight(opts ...LightOption) *DirectionalLight {
 		intensity: 1,
 	}
 	l.node.SetName("DirectionalLight")
+	// Store self as UserData so the renderer can discover lights during scene traversal.
+	l.node.SetUserData(l)
 	for _, opt := range opts {
 		opt.applyDirectionalLight(l)
 	}

@@ -34,6 +34,8 @@ func NewMesh(geometry Geometry, material Material) *Mesh {
 		material: material,
 	}
 	m.node.SetName("Mesh")
+	// Store self as UserData so the renderer can discover meshes during scene traversal.
+	m.node.SetUserData(m)
 	return m
 }
 

@@ -1,5 +1,11 @@
 package g3d
 
+// Shader ID constants. These must match the keys in internal/gpu.ShaderCache.
+const (
+	shaderBasic    = "basic"
+	shaderStandard = "standard"
+)
+
 // AlphaMode determines how alpha values are handled during rendering.
 // Matches GLTF 2.0 alphaMode and Three.js material side conventions.
 type AlphaMode uint8

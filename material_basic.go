@@ -33,7 +33,7 @@ func NewBasicMaterial(opts ...MaterialOption) *BasicMaterial {
 }
 
 // ShaderID returns "basic", identifying the unlit shader pipeline.
-func (m *BasicMaterial) ShaderID() string { return "basic" }
+func (m *BasicMaterial) ShaderID() string { return shaderBasic }
 
 // RenderBucket returns RenderBucketTransparent if opacity < 1,
 // otherwise RenderBucketOpaque.
