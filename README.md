@@ -161,7 +161,7 @@ go get github.com/gogpu/g3d
 
 | Phase | Features | Status |
 |-------|----------|--------|
-| **Phase 1** | Scene graph, cameras, basic materials, box/sphere/plane, renderer | Planned |
+| **Phase 1** | Scene graph, cameras, basic materials, box/sphere/plane, renderer | In Progress |
 | **Phase 2** | PBR lighting, shadows, StandardMaterial, normal maps | Planned |
 | **Phase 3** | GLTF 2.0 loader, skeletal animation, morph targets | Planned |
 | **Phase 4** | Instance batching, environment maps, post-processing, skybox | Planned |
