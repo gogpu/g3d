@@ -1,0 +1,21 @@
+# Codecov configuration for gogpu/g3d
+# https://docs.codecov.io/docs/codecov-yaml
+
+coverage:
+  status:
+    project:
+      default:
+        target: 70%
+        threshold: 5%
+    patch:
+      default:
+        target: 80%
+
+ignore:
+  # GPU-dependent code (requires real GPU device, not testable in CI)
+  - "internal/gpu/device.go"
+  - "internal/gpu/pipeline.go"
+  - "internal/gpu/shader.go"
+  - "renderer.go"
+  # Examples
+  - "examples/**"
