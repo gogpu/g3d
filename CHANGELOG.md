@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-06-14
+
+### Fixed
+- **gpucontext v0.21+ compatibility** — `Device`/`Adapter` changed from interface to opaque struct (ADR-018). Fixed nil checks (`IsNil()`) and type assertions (`wgpu.DeviceFromHandle()`/`wgpu.AdapterFromHandle()`). Fixes [#3](https://github.com/gogpu/g3d/issues/3).
+
+### Changed
+- **deps:** wgpu v0.29.15 → v0.30.2, gpucontext v0.19.0 → v0.21.0, goffi v0.5.3 → v0.5.5
+
 ## [0.1.0] - 2026-05-21
 
 ### Added
@@ -76,5 +84,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Example**
 - `examples/hello-cube/` — rotating lit cube demonstrating full g3d API
 
-[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/gogpu/g3d/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gogpu/g3d/releases/tag/v0.1.0

@@ -46,22 +46,15 @@ func NewGPUState() *GPUState {
 //  6. Set ready = true
 func (g *GPUState) SetDeviceProvider(provider gpucontext.DeviceProvider) error {
 	// Check if adapter is software/CPU — GPU shaders require a hardware adapter.
-	if adapter := provider.Adapter(); adapter != nil {
-		if wgpuAdapter, ok := adapter.(*wgpu.Adapter); ok {
-			if wgpuAdapter.Info().DeviceType == gputypes.DeviceTypeCPU {
-				return fmt.Errorf("g3d: software adapter detected, GPU rendering requires a hardware adapter")
-			}
+	if wgpuAdapter := wgpu.AdapterFromHandle(provider.Adapter()); wgpuAdapter != nil {
+		if wgpuAdapter.Info().DeviceType == gputypes.DeviceTypeCPU {
+			return fmt.Errorf("g3d: software adapter detected, GPU rendering requires a hardware adapter")
 		}
 	}
 
-	dev := provider.Device()
-	if dev == nil {
+	wgpuDev := wgpu.DeviceFromHandle(provider.Device())
+	if wgpuDev == nil {
 		return fmt.Errorf("g3d: provider Device is nil")
-	}
-
-	wgpuDev, ok := dev.(*wgpu.Device)
-	if !ok {
-		return fmt.Errorf("g3d: provider Device is not *wgpu.Device (got %T)", dev)
 	}
 
 	wgpuQueue := wgpuDev.Queue()
