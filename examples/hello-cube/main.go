@@ -27,7 +27,8 @@ func main() {
 	// Configure the application window with continuous rendering (game loop).
 	app := gogpu.NewApp(gogpu.DefaultConfig().
 		WithTitle("g3d Hello Cube").
-		WithSize(800, 600))
+		WithSize(800, 600).
+		WithContinuousRender(true))
 
 	// --- Scene setup (runs once before the first frame) ---
 
