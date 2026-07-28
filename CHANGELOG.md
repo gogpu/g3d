@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`Renderer.RenderTo`** — record g3d into a caller-owned `wgpu.CommandEncoder` without finishing or submitting it, enabling one-submit composition with 2D overlays and other renderers.
+
 ## [0.1.2] - 2026-07-26
 
 ### Fixed
