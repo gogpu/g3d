@@ -108,6 +108,56 @@ func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureV
 	if err := r.validateRenderState(); err != nil {
 		return err
 	}
+	device := r.gpuState.Device()
+	encoder, err := device.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{Label: "g3d_frame"})
+	if err != nil {
+		return fmt.Errorf("g3d: create command encoder: %w", err)
+	}
+
+	if err := r.RenderTo(encoder, scene, camera, targetView); err != nil {
+		encoder.DiscardEncoding()
+		return err
+	}
+
+	commands, err := encoder.Finish()
+	if err != nil {
+		return fmt.Errorf("g3d: finish command encoder: %w", err)
+	}
+	if _, err := r.gpuState.Queue().Submit(commands); err != nil {
+		return fmt.Errorf("g3d: submit commands: %w", err)
+	}
+	return nil
+}
+
+// RenderTo records the scene's render pass into a caller-owned command encoder.
+// It does not finish, submit, or discard the encoder. This lets applications
+// combine g3d with overlays and other renderers in one command buffer and one
+// queue submission.
+//
+// The encoder and target view must belong to the renderer's device. The caller
+// must keep them valid through submission and must not use the encoder
+// concurrently.
+func (r *Renderer) RenderTo(
+	encoder *wgpu.CommandEncoder,
+	scene *Scene,
+	camera Camera,
+	targetView *wgpu.TextureView,
+) error {
+	if encoder == nil {
+		return fmt.Errorf("g3d: command encoder is nil")
+	}
+	if scene == nil {
+		return fmt.Errorf("g3d: scene is nil")
+	}
+	if camera == nil {
+		return fmt.Errorf("g3d: camera is nil")
+	}
+	if targetView == nil {
+		return fmt.Errorf("g3d: target view is nil")
+	}
+	if err := r.validateRenderState(); err != nil {
+		return err
+	}
 
 	// Step 1-2: Update transforms, build render list.
 	scene.UpdateWorldTransforms()
@@ -117,8 +167,8 @@ func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureV
 	// Step 3: Collect lights, build frame uniform data.
 	frameData := r.buildFrameUniforms(scene, camera, cameraWorldPos)
 
-	// Step 4: Record draw calls and submit.
-	return r.submitFrame(scene, targetView, &frameData)
+	// Step 4: Record draw calls. The encoder owner controls submission.
+	return r.recordFrame(encoder, scene, targetView, &frameData)
 }
 
 // validateRenderState checks that the renderer is ready for a frame.
@@ -204,15 +254,14 @@ func (r *Renderer) buildFrameUniforms(scene *Scene, camera Camera, cameraPos Vec
 	return data
 }
 
-// submitFrame creates GPU resources, records draw commands, and submits the
-// command buffer for one frame.
-func (r *Renderer) submitFrame(
+// recordFrame creates per-frame GPU resources and records one render pass.
+func (r *Renderer) recordFrame(
+	encoder *wgpu.CommandEncoder,
 	scene *Scene,
 	targetView *wgpu.TextureView,
 	frameData *gpu.FrameUniformsData,
 ) error {
 	device := r.gpuState.Device()
-	queue := r.gpuState.Queue()
 
 	// Create frame uniform buffer.
 	frameBytes := gpu.PackFrameUniforms(frameData)
@@ -222,12 +271,6 @@ func (r *Renderer) submitFrame(
 		return fmt.Errorf("g3d: create frame uniform buffer: %w", err)
 	}
 	defer frameBuf.Release()
-
-	// Create command encoder and begin render pass.
-	encoder, err := device.CreateCommandEncoder(&wgpu.CommandEncoderDescriptor{Label: "g3d_frame"})
-	if err != nil {
-		return fmt.Errorf("g3d: create command encoder: %w", err)
-	}
 
 	bg := scene.Background
 	renderPass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
@@ -253,35 +296,22 @@ func (r *Renderer) submitFrame(
 		return fmt.Errorf("g3d: begin render pass: %w", err)
 	}
 
-	// Per-frame resources to release after submit.
+	// Command recording retains resource references until execution completes,
+	// so these local handles can be released after the pass is encoded.
 	var perFrameBuffers []*wgpu.Buffer
 	var perFrameBindGroups []*wgpu.BindGroup
+	defer func() { releaseResources(perFrameBindGroups, perFrameBuffers) }()
 
 	// Draw opaque bucket.
 	if drawErr := r.drawBucket(renderPass, r.renderList.Opaque(), device, frameBuf,
 		&perFrameBuffers, &perFrameBindGroups); drawErr != nil {
 		_ = renderPass.End()
-		releaseResources(perFrameBindGroups, perFrameBuffers)
 		return fmt.Errorf("g3d: draw opaque: %w", drawErr)
 	}
 
 	if err = renderPass.End(); err != nil {
-		releaseResources(perFrameBindGroups, perFrameBuffers)
 		return fmt.Errorf("g3d: end render pass: %w", err)
 	}
-
-	commands, err := encoder.Finish()
-	if err != nil {
-		releaseResources(perFrameBindGroups, perFrameBuffers)
-		return fmt.Errorf("g3d: finish command encoder: %w", err)
-	}
-
-	_, err = queue.Submit(commands)
-	releaseResources(perFrameBindGroups, perFrameBuffers)
-	if err != nil {
-		return fmt.Errorf("g3d: submit commands: %w", err)
-	}
-
 	return nil
 }
 

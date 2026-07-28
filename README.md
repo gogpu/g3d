@@ -183,6 +183,27 @@ scene := g3d.NewScene()
 renderer.Render(scene, camera, targetView)
 ```
 
+To combine g3d with additional render passes in one queue submission, record
+into a caller-owned command encoder:
+
+```go
+encoder, err := device.CreateCommandEncoder(nil)
+if err != nil {
+	return err
+}
+if err := renderer.RenderTo(encoder, scene, camera, targetView); err != nil {
+	encoder.DiscardEncoding()
+	return err
+}
+// Record other render passes into encoder here.
+commands, err := encoder.Finish()
+if err != nil {
+	return err
+}
+_, err = queue.Submit(commands)
+return err
+```
+
 ## Architecture
 
 ```
