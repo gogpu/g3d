@@ -7,9 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-07-28
+
 ### Added
 
-- **`Renderer.RenderTo`** — record g3d into a caller-owned `wgpu.CommandEncoder` without finishing or submitting it, enabling one-submit composition with 2D overlays and other renderers.
+- **`Renderer.RenderTo`** — record g3d render passes into a caller-owned `wgpu.CommandEncoder` without finishing or submitting, enabling one-submit composition with 2D overlays and other renderers ([#12](https://github.com/gogpu/g3d/pull/12))
+- **viewport3d example** — g3d + ui integration: rotating PBR cube rendered by g3d inside a Viewport3D ui widget with Material 3 theme and UI controls ([#10](https://github.com/gogpu/g3d/pull/10))
+
+### Fixed
+- **hello-cube smooth animation** — added `WithContinuousRender(true)` for 60fps game-loop rendering instead of event-driven IDLE mode ([#11](https://github.com/gogpu/g3d/pull/11))
+
+### Changed
+- **deps:** wgpu v0.30.23 → v0.30.27, gpucontext v0.21.1 → v0.23.0
 
 ## [0.1.2] - 2026-07-26
 
