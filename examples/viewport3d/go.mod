@@ -4,11 +4,11 @@ go 1.25.0
 
 require (
 	github.com/gogpu/g3d v0.1.3
-	github.com/gogpu/gg v0.50.8
-	github.com/gogpu/gogpu v0.46.0
+	github.com/gogpu/gg v0.50.10
+	github.com/gogpu/gogpu v0.47.1
 	github.com/gogpu/gpucontext v0.23.0
 	github.com/gogpu/ui v0.1.48
-	github.com/gogpu/wgpu v0.30.27
+	github.com/gogpu/wgpu v0.30.29
 )
 
 require (
