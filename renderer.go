@@ -50,15 +50,15 @@ type Renderer struct {
 	// Grow-only pools for per-object GPU resources.
 	// Pools expand when more meshes are visible than the previous high-water mark.
 	// Buffers are updated via queue.WriteBuffer(), never recreated per-frame.
-	objectUniformBufs []*wgpu.Buffer // per-mesh model+normal matrix
-	materialUniformBufs []*wgpu.Buffer // per-mesh material properties
+	objectUniformBufs   []*wgpu.Buffer    // per-mesh model+normal matrix
+	materialUniformBufs []*wgpu.Buffer    // per-mesh material properties
 	objectBindGroups    []*wgpu.BindGroup // per-mesh bind group (group 1)
 
 	// Cached geometry GPU buffers keyed by Geometry pointer identity.
 	// Vertex/index data is static, so buffers are created on first use and
 	// reused until the renderer is released.
-	geomVertBufs map[Geometry]*wgpu.Buffer
-	geomIdxBufs  map[Geometry]*wgpu.Buffer
+	geomVertBufs  map[Geometry]*wgpu.Buffer
+	geomIdxBufs   map[Geometry]*wgpu.Buffer
 	geomIdxCounts map[Geometry]uint32
 
 	// Frame bind groups (group 0) — one per distinct pipeline used in a frame.
