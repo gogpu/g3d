@@ -170,6 +170,13 @@ GOGPU_GRAPHICS_API=dx12     go run ./examples/hello-cube/
 GOGPU_GRAPHICS_API=software go run ./examples/hello-cube/
 ```
 
+### Examples
+
+| Example | Description |
+|---------|-------------|
+| [hello-cube](examples/hello-cube/) | Rotating PBR cube — minimal g3d + gogpu integration |
+| [viewport3d](examples/viewport3d/) | 3D viewport embedded inside gogpu/ui application |
+
 ## Standalone Usage
 
 g3d works without the gogpu application framework. Bring your own window and GPU device:
