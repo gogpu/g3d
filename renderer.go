@@ -21,6 +21,11 @@ import (
 //   - NewRenderer(provider) — shared device from gogpu app
 //   - NewRendererFromDevice(device, queue, format) — standalone (tests, headless)
 //
+// GPU buffer lifecycle follows the gg/internal/gpu/render_session.go pattern:
+// persistent buffers are created once, grown when needed, and updated each frame
+// via queue.WriteBuffer(). This avoids the use-after-free bug where per-frame
+// buffers are released before the GPU finishes executing the command buffer.
+//
 // The renderer is NOT thread-safe. Call Render from a single goroutine.
 type Renderer struct {
 	gpuState *gpu.GPUState
@@ -37,6 +42,34 @@ type Renderer struct {
 	// meshTable stores meshes referenced by DrawCall.MeshIndex during a frame.
 	// Reused across frames to avoid allocation.
 	meshTable []*Mesh
+
+	// Persistent frame uniform buffer (group 0, binding 0). Created once,
+	// updated each frame via queue.WriteBuffer(). Survives across frames.
+	frameUniformBuf *wgpu.Buffer
+
+	// Grow-only pools for per-object GPU resources.
+	// Pools expand when more meshes are visible than the previous high-water mark.
+	// Buffers are updated via queue.WriteBuffer(), never recreated per-frame.
+	objectUniformBufs []*wgpu.Buffer // per-mesh model+normal matrix
+	materialUniformBufs []*wgpu.Buffer // per-mesh material properties
+	objectBindGroups    []*wgpu.BindGroup // per-mesh bind group (group 1)
+
+	// Cached geometry GPU buffers keyed by Geometry pointer identity.
+	// Vertex/index data is static, so buffers are created on first use and
+	// reused until the renderer is released.
+	geomVertBufs map[Geometry]*wgpu.Buffer
+	geomIdxBufs  map[Geometry]*wgpu.Buffer
+	geomIdxCounts map[Geometry]uint32
+
+	// Frame bind groups (group 0) — one per distinct pipeline used in a frame.
+	// Released at the start of the next frame, when the GPU has finished the
+	// previous command buffer (VSync guarantees this for swapchain-based rendering).
+	frameBindGroups []*wgpu.BindGroup
+
+	// Bind groups pending release — deferred until after GPU completion.
+	// WebGPU requires bind groups alive at submit time (wgpu-core track/mod.rs:631).
+	// Same pattern as gg's pendingBindGroupRelease.
+	pendingBindGroupRelease []*wgpu.BindGroup
 }
 
 // NewRenderer creates a Renderer using a shared GPU device from a DeviceProvider
@@ -102,8 +135,8 @@ func (r *Renderer) SetSize(width, height uint32) {
 //  3. Upload frame uniforms (ViewProjection, camera, lights).
 //  4. Record draw calls and submit command buffer.
 //
-// Per-frame GPU buffers are created with MappedAtCreation, filled, unmapped,
-// used, and released after submission. Pipeline creation is lazy and cached.
+// GPU buffers are persistent (created once, updated via queue.WriteBuffer).
+// Pipeline creation is lazy and cached.
 func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureView) error {
 	if err := r.validateRenderState(); err != nil {
 		return err
@@ -158,6 +191,11 @@ func (r *Renderer) RenderTo(
 	if err := r.validateRenderState(); err != nil {
 		return err
 	}
+
+	// Release bind groups from the previous frame. By the time a new frame
+	// begins, VSync guarantees the GPU has finished the previous command buffer.
+	// This is the same deferred-release pattern as gg's pendingBindGroupRelease.
+	r.releasePendingBindGroups()
 
 	// Step 1-2: Update transforms, build render list.
 	scene.UpdateWorldTransforms()
@@ -254,7 +292,10 @@ func (r *Renderer) buildFrameUniforms(scene *Scene, camera Camera, cameraPos Vec
 	return data
 }
 
-// recordFrame creates per-frame GPU resources and records one render pass.
+// recordFrame uploads frame uniforms and records one render pass using
+// persistent GPU buffers. Buffers are created once, grown when needed,
+// and updated each frame via queue.WriteBuffer() -- never released
+// before the GPU finishes the command buffer.
 func (r *Renderer) recordFrame(
 	encoder *wgpu.CommandEncoder,
 	scene *Scene,
@@ -262,15 +303,17 @@ func (r *Renderer) recordFrame(
 	frameData *gpu.FrameUniformsData,
 ) error {
 	device := r.gpuState.Device()
+	queue := r.gpuState.Queue()
 
-	// Create frame uniform buffer.
+	// Update the persistent frame uniform buffer via queue.WriteBuffer().
+	// Buffer is created on first use and reused across frames.
 	frameBytes := gpu.PackFrameUniforms(frameData)
-	frameBuf, err := createMappedBuffer(device, "g3d_frame_uniforms",
-		uint64(len(frameBytes)), wgpu.BufferUsageUniform|wgpu.BufferUsageCopyDst, frameBytes)
-	if err != nil {
-		return fmt.Errorf("g3d: create frame uniform buffer: %w", err)
+	if err := r.ensureFrameUniformBuffer(device); err != nil {
+		return fmt.Errorf("g3d: ensure frame uniform buffer: %w", err)
 	}
-	defer frameBuf.Release()
+	if err := queue.WriteBuffer(r.frameUniformBuf, 0, frameBytes); err != nil {
+		return fmt.Errorf("g3d: write frame uniforms: %w", err)
+	}
 
 	bg := scene.Background
 	renderPass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
@@ -296,15 +339,13 @@ func (r *Renderer) recordFrame(
 		return fmt.Errorf("g3d: begin render pass: %w", err)
 	}
 
-	// Command recording retains resource references until execution completes,
-	// so these local handles can be released after the pass is encoded.
-	var perFrameBuffers []*wgpu.Buffer
-	var perFrameBindGroups []*wgpu.BindGroup
-	defer func() { releaseResources(perFrameBindGroups, perFrameBuffers) }()
+	// Track the bind group pool index for this frame. The pool grows as needed
+	// but bind groups are only released at the start of the NEXT frame.
+	objPoolIdx := 0
 
 	// Draw opaque bucket.
-	if drawErr := r.drawBucket(renderPass, r.renderList.Opaque(), device, frameBuf,
-		&perFrameBuffers, &perFrameBindGroups); drawErr != nil {
+	if drawErr := r.drawBucket(renderPass, r.renderList.Opaque(), device, queue,
+		&objPoolIdx); drawErr != nil {
 		_ = renderPass.End()
 		return fmt.Errorf("g3d: draw opaque: %w", drawErr)
 	}
@@ -316,17 +357,16 @@ func (r *Renderer) recordFrame(
 }
 
 // drawBucket records draw commands for a sorted slice of draw calls.
+// All GPU buffers are persistent -- created once, updated via queue.WriteBuffer().
 func (r *Renderer) drawBucket(
 	rp *wgpu.RenderPassEncoder,
 	calls []render.DrawCall,
 	device *wgpu.Device,
-	frameBuf *wgpu.Buffer,
-	perFrameBuffers *[]*wgpu.Buffer,
-	perFrameBindGroups *[]*wgpu.BindGroup,
+	queue *wgpu.Queue,
+	objPoolIdx *int,
 ) error {
 	var currentPipelineKey gpu.PipelineKey
 	var currentBundle *gpu.PipelineBundle
-	var frameBindGroup *wgpu.BindGroup
 	pipelineSet := false
 
 	for i := range calls {
@@ -354,47 +394,46 @@ func (r *Renderer) drawBucket(
 			rp.SetPipeline(bundle.Pipeline)
 
 			// Create frame bind group for this pipeline's layout.
-			if frameBindGroup != nil {
-				*perFrameBindGroups = append(*perFrameBindGroups, frameBindGroup)
-			}
+			// Frame bind groups are deferred-released at the start of the next frame.
 			fbg, err := device.CreateBindGroup(&wgpu.BindGroupDescriptor{
 				Label:  "g3d_frame_bg",
 				Layout: bundle.FrameLayout,
 				Entries: []wgpu.BindGroupEntry{
-					{Binding: 0, Buffer: frameBuf, Size: gpu.FrameUniformsSize},
+					{Binding: 0, Buffer: r.frameUniformBuf, Size: gpu.FrameUniformsSize},
 				},
 			})
 			if err != nil {
 				return fmt.Errorf("create frame bind group: %w", err)
 			}
-			frameBindGroup = fbg
-			rp.SetBindGroup(0, frameBindGroup, nil)
+			r.frameBindGroups = append(r.frameBindGroups, fbg)
+			rp.SetBindGroup(0, fbg, nil)
 		}
 
-		if err := r.recordDrawCall(rp, device, mesh, mat, geom,
-			currentBundle, perFrameBuffers, perFrameBindGroups); err != nil {
+		if err := r.recordDrawCall(rp, device, queue, mesh, mat, geom,
+			currentBundle, objPoolIdx); err != nil {
 			return err
 		}
 	}
 
-	if frameBindGroup != nil {
-		*perFrameBindGroups = append(*perFrameBindGroups, frameBindGroup)
-	}
 	return nil
 }
 
 // recordDrawCall uploads per-object uniforms and issues a single draw.
+// Uses persistent buffer pools for uniforms and cached geometry buffers.
 func (r *Renderer) recordDrawCall(
 	rp *wgpu.RenderPassEncoder,
 	device *wgpu.Device,
+	queue *wgpu.Queue,
 	mesh *Mesh,
 	mat Material,
 	geom Geometry,
 	bundle *gpu.PipelineBundle,
-	perFrameBuffers *[]*wgpu.Buffer,
-	perFrameBindGroups *[]*wgpu.BindGroup,
+	objPoolIdx *int,
 ) error {
-	// Per-object uniform buffer (model + normal matrix).
+	idx := *objPoolIdx
+	*objPoolIdx++
+
+	// Per-object uniform data (model + normal matrix).
 	worldMat := mesh.node.WorldMatrix()
 	normalMat := worldMat.Inverse().Transpose()
 
@@ -404,49 +443,59 @@ func (r *Renderer) recordDrawCall(
 	}
 	objBytes := gpu.PackObjectUniforms(&objData)
 
-	objBuf, err := createMappedBuffer(device, "g3d_object_uniforms",
-		uint64(len(objBytes)), wgpu.BufferUsageUniform|wgpu.BufferUsageCopyDst, objBytes)
-	if err != nil {
-		return fmt.Errorf("create object uniform buffer: %w", err)
+	// Grow the object uniform buffer pool if needed.
+	if err := r.ensureObjectPool(device, idx); err != nil {
+		return fmt.Errorf("ensure object pool[%d]: %w", idx, err)
 	}
-	*perFrameBuffers = append(*perFrameBuffers, objBuf)
 
-	// Per-material uniform buffer.
+	// Upload object uniforms via WriteBuffer (buffer persists across frames).
+	if err := queue.WriteBuffer(r.objectUniformBufs[idx], 0, objBytes); err != nil {
+		return fmt.Errorf("write object uniforms[%d]: %w", idx, err)
+	}
+
+	// Upload material uniforms via WriteBuffer.
 	matBytes := mat.UniformData()
-	matBuf, err := createMappedBuffer(device, "g3d_material_uniforms",
-		uint64(len(matBytes)), wgpu.BufferUsageUniform|wgpu.BufferUsageCopyDst, matBytes)
-	if err != nil {
-		return fmt.Errorf("create material uniform buffer: %w", err)
+	if err := queue.WriteBuffer(r.materialUniformBufs[idx], 0, matBytes); err != nil {
+		return fmt.Errorf("write material uniforms[%d]: %w", idx, err)
 	}
-	*perFrameBuffers = append(*perFrameBuffers, matBuf)
 
-	// Object bind group (group 1: object + material).
+	// Stale bind groups from the previous frame reference the same buffers with
+	// different content. Create a new bind group each frame and defer its release
+	// to the start of the next frame, when the GPU has finished.
+	if idx < len(r.objectBindGroups) && r.objectBindGroups[idx] != nil {
+		r.pendingBindGroupRelease = append(r.pendingBindGroupRelease, r.objectBindGroups[idx])
+		r.objectBindGroups[idx] = nil
+	}
+
 	objBG, err := device.CreateBindGroup(&wgpu.BindGroupDescriptor{
 		Label:  "g3d_object_bg",
 		Layout: bundle.ObjectLayout,
 		Entries: []wgpu.BindGroupEntry{
-			{Binding: 0, Buffer: objBuf, Size: uint64(len(objBytes))},
-			{Binding: 1, Buffer: matBuf, Size: uint64(len(matBytes))},
+			{Binding: 0, Buffer: r.objectUniformBufs[idx], Size: uint64(len(objBytes))},
+			{Binding: 1, Buffer: r.materialUniformBufs[idx], Size: uint64(len(matBytes))},
 		},
 	})
 	if err != nil {
 		return fmt.Errorf("create object bind group: %w", err)
 	}
-	*perFrameBindGroups = append(*perFrameBindGroups, objBG)
+	// Store in pool for deferred release next frame.
+	for len(r.objectBindGroups) <= idx {
+		r.objectBindGroups = append(r.objectBindGroups, nil)
+	}
+	r.objectBindGroups[idx] = objBG
 	rp.SetBindGroup(1, objBG, nil)
 
-	// Vertex and index buffers.
-	vertBuf, err := createVertexBuffer(device, geom)
+	// Geometry buffers are cached by Geometry identity — vertex/index data is
+	// static, so buffers are created on first use via MappedAtCreation and reused.
+	vertBuf, err := r.ensureVertexBuffer(device, geom)
 	if err != nil {
 		return fmt.Errorf("create vertex buffer: %w", err)
 	}
-	*perFrameBuffers = append(*perFrameBuffers, vertBuf)
 
-	idxBuf, idxCount, err := createIndexBuffer(device, geom)
+	idxBuf, idxCount, err := r.ensureIndexBuffer(device, geom)
 	if err != nil {
 		return fmt.Errorf("create index buffer: %w", err)
 	}
-	*perFrameBuffers = append(*perFrameBuffers, idxBuf)
 
 	rp.SetVertexBuffer(0, vertBuf, 0)
 	rp.SetIndexBuffer(idxBuf, gputypes.IndexFormatUint32, 0)
@@ -458,6 +507,8 @@ func (r *Renderer) recordDrawCall(
 // Release frees all GPU resources owned by the renderer.
 // After this call the renderer cannot be used.
 func (r *Renderer) Release() {
+	// Release persistent uniform buffers and bind groups.
+	r.releasePersistentResources()
 	r.releaseDepthTexture()
 	r.gpuState.Close()
 }
@@ -515,46 +566,170 @@ func (r *Renderer) releaseDepthTexture() {
 	}
 }
 
-// releaseResources frees per-frame bind groups and buffers after submit.
-func releaseResources(bindGroups []*wgpu.BindGroup, buffers []*wgpu.Buffer) {
-	for _, bg := range bindGroups {
-		bg.Release()
+// ensureFrameUniformBuffer creates the persistent frame uniform buffer on first
+// use. The buffer is reused across frames and updated via queue.WriteBuffer().
+func (r *Renderer) ensureFrameUniformBuffer(device *wgpu.Device) error {
+	if r.frameUniformBuf != nil {
+		return nil
 	}
-	for _, buf := range buffers {
-		buf.Release()
-	}
-}
-
-// createMappedBuffer creates a GPU buffer with MappedAtCreation, copies data
-// into it via MappedRange, and unmaps it. The buffer is ready for use after
-// this function returns.
-func createMappedBuffer(
-	device *wgpu.Device, label string, size uint64, usage wgpu.BufferUsage, data []byte,
-) (*wgpu.Buffer, error) {
 	buf, err := device.CreateBuffer(&wgpu.BufferDescriptor{
-		Label:            label,
-		Size:             size,
-		Usage:            usage,
-		MappedAtCreation: true,
+		Label: "g3d_frame_uniforms",
+		Size:  gpu.FrameUniformsSize,
+		Usage: wgpu.BufferUsageUniform | wgpu.BufferUsageCopyDst,
 	})
 	if err != nil {
-		return nil, err
+		return err
+	}
+	r.frameUniformBuf = buf
+	return nil
+}
+
+// ensureObjectPool grows the per-object buffer pools (object uniforms,
+// material uniforms) so that index idx is valid. New buffers are created
+// with CopyDst usage for queue.WriteBuffer() updates.
+func (r *Renderer) ensureObjectPool(device *wgpu.Device, idx int) error {
+	for idx >= len(r.objectUniformBufs) {
+		n := len(r.objectUniformBufs)
+		buf, err := device.CreateBuffer(&wgpu.BufferDescriptor{
+			Label: fmt.Sprintf("g3d_object_uniforms_%d", n),
+			Size:  gpu.ObjectUniformsSize,
+			Usage: wgpu.BufferUsageUniform | wgpu.BufferUsageCopyDst,
+		})
+		if err != nil {
+			return fmt.Errorf("create object uniform buffer[%d]: %w", n, err)
+		}
+		r.objectUniformBufs = append(r.objectUniformBufs, buf)
 	}
 
-	mapped, err := buf.MappedRange(0, size)
+	// Material uniform pool must match the object pool size.
+	// Use 32 bytes (StandardMaterial size) as the max — BasicMaterial (16 bytes)
+	// fits within 32 bytes with zero padding, and WriteBuffer only writes the
+	// actual data length.
+	const maxMaterialUniformSize = 32
+	for idx >= len(r.materialUniformBufs) {
+		n := len(r.materialUniformBufs)
+		buf, err := device.CreateBuffer(&wgpu.BufferDescriptor{
+			Label: fmt.Sprintf("g3d_material_uniforms_%d", n),
+			Size:  maxMaterialUniformSize,
+			Usage: wgpu.BufferUsageUniform | wgpu.BufferUsageCopyDst,
+		})
+		if err != nil {
+			return fmt.Errorf("create material uniform buffer[%d]: %w", n, err)
+		}
+		r.materialUniformBufs = append(r.materialUniformBufs, buf)
+	}
+
+	return nil
+}
+
+// ensureVertexBuffer returns a cached vertex buffer for the given geometry,
+// creating it with MappedAtCreation on first use. Geometry data is static,
+// so the buffer persists until the renderer is released.
+func (r *Renderer) ensureVertexBuffer(device *wgpu.Device, geom Geometry) (*wgpu.Buffer, error) {
+	if buf, ok := r.geomVertBufs[geom]; ok {
+		return buf, nil
+	}
+
+	buf, err := createVertexBuffer(device, geom)
 	if err != nil {
-		buf.Release()
 		return nil, err
 	}
 
-	copy(mapped.Bytes(), data)
-
-	if err := buf.Unmap(); err != nil {
-		buf.Release()
-		return nil, err
+	if r.geomVertBufs == nil {
+		r.geomVertBufs = make(map[Geometry]*wgpu.Buffer)
 	}
-
+	r.geomVertBufs[geom] = buf
 	return buf, nil
+}
+
+// ensureIndexBuffer returns a cached index buffer for the given geometry,
+// creating it with MappedAtCreation on first use.
+func (r *Renderer) ensureIndexBuffer(device *wgpu.Device, geom Geometry) (*wgpu.Buffer, uint32, error) {
+	if buf, ok := r.geomIdxBufs[geom]; ok {
+		return buf, r.geomIdxCounts[geom], nil
+	}
+
+	buf, count, err := createIndexBuffer(device, geom)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if r.geomIdxBufs == nil {
+		r.geomIdxBufs = make(map[Geometry]*wgpu.Buffer)
+	}
+	if r.geomIdxCounts == nil {
+		r.geomIdxCounts = make(map[Geometry]uint32)
+	}
+	r.geomIdxBufs[geom] = buf
+	r.geomIdxCounts[geom] = count
+	return buf, count, nil
+}
+
+// releasePendingBindGroups frees bind groups from the previous frame.
+// Called at the start of each new frame, when VSync guarantees the GPU
+// has finished the previous command buffer.
+func (r *Renderer) releasePendingBindGroups() {
+	for _, bg := range r.pendingBindGroupRelease {
+		bg.Release()
+	}
+	r.pendingBindGroupRelease = r.pendingBindGroupRelease[:0]
+
+	// Frame bind groups are created per pipeline switch and also need
+	// deferred release.
+	for _, bg := range r.frameBindGroups {
+		bg.Release()
+	}
+	r.frameBindGroups = r.frameBindGroups[:0]
+}
+
+// releasePersistentResources frees all persistent GPU resources owned by the
+// renderer. Called from Release(). Order: bind groups, then buffers (bind
+// groups reference buffers).
+func (r *Renderer) releasePersistentResources() {
+	// Release pending and current bind groups first.
+	for _, bg := range r.pendingBindGroupRelease {
+		bg.Release()
+	}
+	r.pendingBindGroupRelease = nil
+
+	for _, bg := range r.frameBindGroups {
+		bg.Release()
+	}
+	r.frameBindGroups = nil
+
+	for _, bg := range r.objectBindGroups {
+		if bg != nil {
+			bg.Release()
+		}
+	}
+	r.objectBindGroups = nil
+
+	// Release uniform buffers.
+	if r.frameUniformBuf != nil {
+		r.frameUniformBuf.Release()
+		r.frameUniformBuf = nil
+	}
+	for _, buf := range r.objectUniformBufs {
+		buf.Release()
+	}
+	r.objectUniformBufs = nil
+
+	for _, buf := range r.materialUniformBufs {
+		buf.Release()
+	}
+	r.materialUniformBufs = nil
+
+	// Release cached geometry buffers.
+	for _, buf := range r.geomVertBufs {
+		buf.Release()
+	}
+	r.geomVertBufs = nil
+
+	for _, buf := range r.geomIdxBufs {
+		buf.Release()
+	}
+	r.geomIdxBufs = nil
+	r.geomIdxCounts = nil
 }
 
 // createVertexBuffer creates a vertex buffer from geometry data using

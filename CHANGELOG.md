@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **fullscreen-overlay example** — g3d + gg compositing: rotating PBR cube with 2D HUD overlay (title, FPS counter, crosshair, status bar). Demonstrates enterprise multi-pass rendering: g3d pass (LoadOp::Clear + depth) → MarkExternalContent → gg pass (LoadOp::Load + alpha blend)
+
+### Fixed
+- **GPU buffer lifecycle** — uniform buffers (frame, object, material) were released via `defer` before async `queue.Submit()` completed on GPU, causing "command buffer references released buffer" errors. Replaced per-frame MappedAtCreation+Release with persistent buffers + `queue.WriteBuffer()` following gg's enterprise pattern. Geometry buffers cached by identity. Bind groups deferred-released next frame
+
 ## [0.1.3] - 2026-07-28
 
 ### Added
