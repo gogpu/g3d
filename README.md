@@ -126,7 +126,12 @@ func main() {
 - **Zero-alloc render path** — no GC pressure during frame rendering
 - **Pipeline cache** — compile shader variants once, reuse forever
 - **3-key opaque sort** — PipelineKey → MaterialID → Distance (minimizes GPU state changes)
-- **MappedAtCreation** — zero-copy GPU buffer upload (WebGPU compliant)
+- **Persistent GPU buffers** — uniform buffers reused across frames with `queue.WriteBuffer()`
+
+### Integration (v0.1.4)
+- **GPUView widget** — embed 3D viewport inside [gogpu/ui](https://github.com/gogpu/ui) applications
+- **2D overlay compositing** — fullscreen 3D with [gogpu/gg](https://github.com/gogpu/gg) HUD overlay via `MarkExternalContent`
+- **RenderTo** — record into caller-owned command encoder for multi-pass composition
 
 ### Planned
 - **Full PBR** — Cook-Torrance BRDF, shadow mapping, normal maps (Phase 2)
@@ -177,6 +182,54 @@ GOGPU_GRAPHICS_API=software go run ./examples/hello-cube/
 | [hello-cube](examples/hello-cube/) | Rotating PBR cube — minimal g3d + gogpu integration |
 | [fullscreen-overlay](examples/fullscreen-overlay/) | Fullscreen 3D scene with 2D HUD overlay (g3d + gg) |
 | [viewport3d](examples/viewport3d/) | 3D viewport embedded inside gogpu/ui application |
+
+## Integration
+
+g3d is designed to compose with the gogpu ecosystem — embed 3D in UI apps, overlay 2D on 3D, or use standalone.
+
+### Embedded 3D widget (g3d + ui)
+
+Render 3D content inside a [gogpu/ui](https://github.com/gogpu/ui) widget using the GPUView widget. The renderer draws into an offscreen GPU texture that the ui compositor blits into the widget tree.
+
+```go
+vp := gpuview.New(
+    gpuview.Size(600, 400),
+    gpuview.Continuous(true),
+    gpuview.OnRender(func(view gpucontext.TextureView) {
+        wgpuView := (*wgpu.TextureView)(view.Pointer())
+        renderer.Render(scene, camera, wgpuView)
+    }),
+)
+```
+
+See [examples/viewport3d](examples/viewport3d/) for a complete working example.
+
+### Fullscreen 3D + 2D overlay (g3d + gg)
+
+Render a 3D scene full-window, then draw 2D HUD elements on top with [gogpu/gg](https://github.com/gogpu/gg). Uses the enterprise multi-pass pattern (Unity, Bevy+egui, ImGui): 3D pass with `LoadOp::Clear`, then 2D pass with `LoadOp::Load`.
+
+```go
+app.OnDraw(func(dc *gogpu.Context) {
+    renderer.Render(scene, camera, dc.SurfaceView())
+    dc.MarkExternalContent()
+    canvas.Draw(func(cc *gg.Context) { /* HUD elements */ })
+    canvas.Render(dc.RenderTarget())
+})
+```
+
+See [examples/fullscreen-overlay](examples/fullscreen-overlay/) for a complete working example with FPS counter, crosshair, and status bar.
+
+### Shared command encoder (RenderTo)
+
+Record g3d render passes into a caller-owned command encoder for single-submit composition with other renderers:
+
+```go
+encoder, _ := device.CreateCommandEncoder(nil)
+renderer.RenderTo(encoder, scene, camera, targetView)
+// Record additional passes...
+commands, _ := encoder.Finish()
+queue.Submit(commands)
+```
 
 ## Standalone Usage
 
