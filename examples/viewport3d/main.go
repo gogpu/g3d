@@ -1,7 +1,7 @@
-// Command viewport3d embeds a g3d 3D viewport inside a gogpu/ui application.
+// Command gpuview embeds a g3d 3D viewport inside a gogpu/ui application.
 //
 // This example demonstrates the integration between g3d (3D rendering) and
-// gogpu/ui (GUI toolkit) using the Viewport3D widget. A rotating PBR-lit cube
+// gogpu/ui (GUI toolkit) using the GPUView widget. A rotating PBR-lit cube
 // is rendered into an offscreen GPU texture, which the ui compositor then
 // blits into the widget tree alongside standard 2D UI elements.
 //
@@ -11,7 +11,7 @@
 //	  ├── ui.App (widget tree, event dispatch)
 //	  │     └── Column layout
 //	  │           ├── Title text
-//	  │           ├── Viewport3D widget ← g3d renders here
+//	  │           ├── GPUView widget ← g3d renders here
 //	  │           └── Control buttons
 //	  └── g3d.Renderer (forward pipeline, PBR, depth)
 //
@@ -41,7 +41,7 @@ import (
 	"github.com/gogpu/gpucontext"
 	"github.com/gogpu/ui/app"
 	"github.com/gogpu/ui/core/button"
-	"github.com/gogpu/ui/core/viewport3d"
+	"github.com/gogpu/ui/core/gpuview"
 	"github.com/gogpu/ui/desktop"
 	"github.com/gogpu/ui/primitives"
 	"github.com/gogpu/ui/theme/material3"
@@ -60,7 +60,7 @@ func main() {
 	// --- Application setup ---
 
 	gogpuApp := gogpu.NewApp(gogpu.DefaultConfig().
-		WithTitle("g3d + ui — Viewport3D Demo").
+		WithTitle("g3d + ui — GPUView Demo").
 		WithSize(750, 620))
 
 	m3 := material3.New(widget.Hex(0x6750A4)) // Material 3 purple
@@ -82,12 +82,12 @@ func main() {
 	var rotationY, rotationX float32
 	paused := false
 
-	// --- Viewport3D widget ---
+	// --- GPUView widget ---
 
-	vp := viewport3d.New(
-		viewport3d.Size(viewportWidth, viewportHeight),
-		viewport3d.Continuous(true), // real-time 3D rendering every frame
-		viewport3d.OnRender(func(view gpucontext.TextureView) {
+	vp := gpuview.New(
+		gpuview.Size(viewportWidth, viewportHeight),
+		gpuview.Continuous(true), // real-time 3D rendering every frame
+		gpuview.OnRender(func(view gpucontext.TextureView) {
 			if view.IsNil() {
 				return
 			}
@@ -203,14 +203,14 @@ func buildScene() (*g3d.Scene, g3d.Camera, *g3d.Mesh) {
 
 // buildUI creates the widget tree: a card with the 3D viewport and controls.
 func buildUI(
-	vp *viewport3d.Widget,
+	vp *gpuview.Widget,
 	paused *bool,
 	rotX, rotY *float32,
 	cube *g3d.Mesh,
 ) *primitives.BoxWidget {
 	card := primitives.Box(
 		// Title.
-		primitives.Text("g3d Viewport3D").
+		primitives.Text("g3d GPUView").
 			FontSize(22).
 			Bold().
 			Color(widget.RGBA8(33, 33, 33, 255)),
