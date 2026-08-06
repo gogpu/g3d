@@ -170,7 +170,16 @@ func main() {
 			return // Surface not available (minimized window).
 		}
 
-		if err := renderer3d.Render(scene, camera, view); err != nil {
+		// Use the framework's shared encoder so g3d and gg record into
+		// one command buffer — single queue.Submit at frame end.
+		// This avoids a Vulkan present-semaphore race on TBDR GPUs
+		// (e.g. Apple Silicon via Mesa Asahi). See g3d#22.
+		encoder := dc.CommandEncoder()
+		if encoder == nil {
+			return
+		}
+
+		if err := renderer3d.RenderTo(encoder, scene, camera, view); err != nil {
 			log.Printf("g3d: render error: %v", err)
 			return
 		}

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-08-06
+
+### Fixed
+- **fullscreen-overlay Vulkan present race** — switched example from `Render()` (own encoder + submit) to `RenderTo()` + shared framework encoder, eliminating a dual-submit race on TBDR GPUs (Apple Silicon via Mesa Asahi). Screen capture showed correct buffer, but physical display showed stale frames due to present semaphore consumed by first submit only ([#22](https://github.com/gogpu/g3d/issues/22))
+
+### Changed
+- **deps:** wgpu v0.30.34 → v0.30.36 (Vulkan accumulated present semaphores — multi-submit sync fix)
+
 ## [0.1.4] - 2026-08-02
 
 ### Added
