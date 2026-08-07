@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-08-07
+
+### Changed
+- **deps:** wgpu v0.30.36 → v0.30.37 (Vulkan present layout alignment — `COLOR_ATTACHMENT_OPTIMAL` instead of `PRESENT_SRC_KHR` for intermediate render passes, fixes TBDR glitch on Asahi Linux [#22](https://github.com/gogpu/g3d/issues/22))
+- **deps:** examples updated to gogpu v0.50.2, gg v0.50.14, ui v0.1.51
+
 ## [0.1.5] - 2026-08-06
 
 ### Fixed

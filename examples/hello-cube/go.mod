@@ -4,7 +4,7 @@ go 1.25.0
 
 require (
 	github.com/gogpu/g3d v0.1.4
-	github.com/gogpu/gogpu v0.48.4
+	github.com/gogpu/gogpu v0.50.2
 )
 
 require (
@@ -13,6 +13,6 @@ require (
 	github.com/gogpu/gpucontext v0.24.0 // indirect
 	github.com/gogpu/gputypes v0.5.1 // indirect
 	github.com/gogpu/naga v0.18.0 // indirect
-	github.com/gogpu/wgpu v0.30.36 // indirect
+	github.com/gogpu/wgpu v0.30.37 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 )
