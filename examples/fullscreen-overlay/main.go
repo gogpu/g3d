@@ -9,13 +9,19 @@
 // Architecture (two-pass, same surface):
 //
 //	Pass 1 — g3d forward renderer (LoadOp::Clear + depth)
-//	       ↓ dc.MarkExternalContent()
+//	       ↓ dc.MarkPreserveContent() + g3dSource.ReportDamageWithReason(...)
 //	Pass 2 — gg canvas overlay    (LoadOp::Load, no depth, alpha blend)
 //
-// MarkExternalContent signals gogpu that a prior render pass has already
+// MarkPreserveContent signals gogpu that a prior render pass has already
 // written to the surface, so gg's pass uses LoadOp::Load instead of
-// LoadOp::Clear — preserving the 3D content underneath. Enterprise
-// references: Flutter InlinePassContext, Qt6 QRhi beginExternal/endExternal.
+// LoadOp::Clear — preserving the 3D content underneath.
+//
+// RegisterDamageSource + ReportDamageWithReason (ADR-065) reports per-frame
+// damage so the compositor can union damage from all renderers and use
+// VkPresentRegionsKHR on Wayland for power-efficient partial presents.
+//
+// Enterprise references: Chromium cc DamageTracker (union pattern),
+// Flutter InlinePassContext, Qt6 QRhi beginExternal/endExternal.
 //
 // Run with different backends:
 //
@@ -27,6 +33,7 @@ package main
 
 import (
 	"fmt"
+	"image"
 	"log"
 	"math"
 	"os"
@@ -65,6 +72,7 @@ func main() {
 
 	var renderer3d *g3d.Renderer
 	var canvas *ggcanvas.Canvas
+	var g3dSource *gogpu.DamageSource // ADR-065: damage reporting for 3D content
 	var backendName string
 	var lastDrawTime time.Time
 	var animTime float64
@@ -111,6 +119,9 @@ func main() {
 			if err != nil {
 				log.Fatalf("g3d: create renderer: %v", err)
 			}
+			// Register g3d as a damage source (ADR-065). The compositor
+			// unions damage from all sources (gg, g3d) at present time.
+			g3dSource = dc.RegisterDamageSource("g3d")
 			backendName = dc.Backend()
 			log.Printf("Backend: %s", backendName)
 		}
@@ -185,7 +196,17 @@ func main() {
 		}
 
 		// ---- Signal: 3D content already on the surface ----
-		dc.MarkExternalContent()
+		// ADR-065: report full-viewport damage for the 3D scene so the
+		// compositor knows this area changed. MarkPreserveContent tells
+		// subsequent render passes (gg) to use LoadOp::Load.
+		g3dSource.ReportDamageWithReason(
+			gpucontext.DamageReason{
+				Category: gpucontext.DamageCategoryAnimation,
+				Detail:   "3D scene",
+			},
+			image.Rect(0, 0, fbW, fbH),
+		)
+		dc.MarkPreserveContent()
 
 		// ---- Pass 2: gg renders the 2D HUD overlay (LoadOp::Load) ----
 
