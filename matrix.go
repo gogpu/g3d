@@ -133,12 +133,42 @@ func Mat4Ortho(left, right, bottom, top, near, far float32) Mat4 {
 
 // Mat4LookAt returns a view matrix looking from eye toward target with the given up direction.
 func Mat4LookAt(eye, target, up Vec3) Mat4 {
-	// Forward vector (camera looks down -Z in right-handed coordinates)
-	f := target.Sub(eye).Normalize()
-	// Right vector
-	r := f.Cross(up).Normalize()
-	// Recalculated up vector
-	u := r.Cross(f)
+	// Forward vector (camera looks down -Z in right-handed coordinates). A
+	// coincident eye and target do not define a direction; keep the view valid
+	// by retaining the conventional -Z camera forward direction.
+	direction := target.Sub(eye)
+	if direction == (Vec3{}) {
+		direction = Vec3{0, 0, -1}
+	}
+	f := direction.Normalize()
+	// Normalize the caller's up vector before comparing its cross product with
+	// the view direction. Parallel detection must not depend on the up vector's
+	// magnitude (for example, a scaled world-up vector).
+	up = up.Normalize()
+	if up == (Vec3{}) {
+		// A zero up vector carries no roll information. Preserve the API's
+		// conventional world +Y orientation rather than selecting an arbitrary
+		// axis for ordinary view directions.
+		up = Vec3{0, 1, 0}
+	}
+
+	// Right vector. When the requested up direction is parallel (or nearly
+	// parallel) to the view direction, its cross product cannot define a stable
+	// roll. Select a cardinal fallback axis that is safely non-parallel with f.
+	r := f.Cross(up)
+	if r.LengthSq() <= lookAtEpsilon*lookAtEpsilon {
+		fallbackUp := Vec3{0, 1, 0}
+		if absFloat32(f.Y) >= 1-lookAtEpsilon {
+			// For top-down views, world +Z is the screen-up direction. This
+			// gives a deterministic and useful roll for both +/-Y views.
+			fallbackUp = Vec3{0, 0, 1}
+		}
+		r = f.Cross(fallbackUp)
+	}
+	r = r.Normalize()
+	// Recalculated up vector. Both f and r are unit and perpendicular, so the
+	// cross product preserves a right-handed, orthonormal view basis.
+	u := r.Cross(f).Normalize()
 
 	return Mat4{
 		r.X, u.X, -f.X, 0,
@@ -146,6 +176,15 @@ func Mat4LookAt(eye, target, up Vec3) Mat4 {
 		r.Z, u.Z, -f.Z, 0,
 		-r.Dot(eye), -u.Dot(eye), f.Dot(eye), 1,
 	}
+}
+
+const lookAtEpsilon float32 = 1e-6
+
+func absFloat32(v float32) float32 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }
 
 // Mat4FromQuat returns a rotation matrix equivalent to the given quaternion.

@@ -544,6 +544,58 @@ func TestNodeLookAtPositiveZ(t *testing.T) {
 	}
 }
 
+func TestNodeLookAtParallelAndAntiParallelUp(t *testing.T) {
+	tests := []struct {
+		name string
+		eye  Vec3
+	}{
+		{name: "parallel", eye: Vec3{0, -10, 0}},
+		{name: "anti-parallel", eye: Vec3{0, 10, 0}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			n := NewNode()
+			n.SetPosition(tt.eye)
+			n.LookAt(Vec3{})
+
+			world := n.WorldMatrix()
+			if !approxEqual(world.Determinant(), 1, 1e-4) {
+				t.Fatalf("LookAt world determinant = %v, want 1", world.Determinant())
+			}
+			view := world.Inverse()
+			targetInView := view.MulVec4(Vec4{0, 0, 0, 1})
+			if !approxEqual(targetInView.X, 0, 1e-4) || !approxEqual(targetInView.Y, 0, 1e-4) {
+				t.Errorf("target in view space = %v, want zero X/Y", targetInView)
+			}
+			if !approxEqual(targetInView.Z, -10, 1e-4) {
+				t.Errorf("target in view Z = %v, want -10", targetInView.Z)
+			}
+		})
+	}
+}
+
+func TestNodeLookAtWithTranslatedParent(t *testing.T) {
+	parent := NewNode()
+	parent.SetPosition(Vec3{5, 2, -3})
+	child := NewNode()
+	child.SetPosition(Vec3{0, 10, 0})
+	parent.Add(child)
+
+	// A translated (but unrotated) parent is supported by Node.LookAt: the
+	// child eye is computed in world space before deriving its local rotation.
+	child.LookAt(parent.WorldPosition())
+
+	view := child.WorldMatrix().Inverse()
+	targetInView := view.MulVec4(Vec4{parent.Position.X, parent.Position.Y, parent.Position.Z, 1})
+	if !approxEqual(targetInView.X, 0, 1e-4) || !approxEqual(targetInView.Y, 0, 1e-4) {
+		t.Errorf("parent target in child view = %v, want zero X/Y", targetInView)
+	}
+	if !approxEqual(targetInView.Z, -10, 1e-4) {
+		t.Errorf("parent target in child view Z = %v, want -10", targetInView.Z)
+	}
+}
+
 // --- Deep hierarchy benchmark ---
 
 func TestNodeDeepHierarchyWorldMatrix(t *testing.T) {
