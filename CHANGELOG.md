@@ -5,7 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.7] - 2026-08-10
+
+### Changed
+- **Damage source registration** (ADR-065) — migrated from `SetDamageRects` + `MarkExternalContent` to `RegisterDamageSource` + `MarkPreserveContent`. g3d registers as named damage source ("g3d"), reports full-viewport damage each frame. Compositor unions all sources at present time.
+- **deps:** gpucontext v0.24.0 → v0.27.0 (SurfaceCompositor, DamageSource interfaces), wgpu v0.30.37 → v0.31.0 (core resource tracker, inline present barrier)
 
 ## [0.1.6] - 2026-08-07
 

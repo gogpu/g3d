@@ -9,10 +9,10 @@
 // Architecture (two-pass, same surface):
 //
 //	Pass 1 — g3d forward renderer (LoadOp::Clear + depth)
-//	       ↓ dc.MarkExternalContent()
+//	       ↓ dc.MarkPreserveContent()
 //	Pass 2 — gg canvas overlay    (LoadOp::Load, no depth, alpha blend)
 //
-// MarkExternalContent signals gogpu that a prior render pass has already
+// MarkPreserveContent signals gogpu that a prior render pass has already
 // written to the surface, so gg's pass uses LoadOp::Load instead of
 // LoadOp::Clear — preserving the 3D content underneath. Enterprise
 // references: Flutter InlinePassContext, Qt6 QRhi beginExternal/endExternal.
@@ -185,7 +185,7 @@ func main() {
 		}
 
 		// ---- Signal: 3D content already on the surface ----
-		dc.MarkExternalContent()
+		dc.MarkPreserveContent()
 
 		// ---- Pass 2: gg renders the 2D HUD overlay (LoadOp::Load) ----
 

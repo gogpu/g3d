@@ -3,9 +3,9 @@ module github.com/gogpu/g3d
 go 1.25.0
 
 require (
-	github.com/gogpu/gpucontext v0.24.0
+	github.com/gogpu/gpucontext v0.27.0
 	github.com/gogpu/gputypes v0.5.1
-	github.com/gogpu/wgpu v0.30.37
+	github.com/gogpu/wgpu v0.31.0
 )
 
 require (
