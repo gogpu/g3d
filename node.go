@@ -8,9 +8,12 @@ import "math"
 // dirty-flag propagation, and parent-child relationships.
 //
 // Setting Position, Rotation, or Scale through the provided setters marks the
-// local matrix dirty. A dirty local matrix automatically dirties the world
-// matrix of the node and all of its descendants, ensuring that WorldMatrix
-// always returns a correct result without manual intervention.
+// local matrix dirty. Direct mutations of those public fields are detected
+// lazily by LocalMatrix and WorldMatrix; setters are preferred when a caller
+// needs dirty propagation to happen immediately. A dirty local matrix
+// automatically dirties the world matrix of the node and all of its
+// descendants, ensuring that WorldMatrix always returns a correct result
+// without manual intervention.
 //
 // Design: Three.js Object3D + Kaiju Transform dirty propagation + idiomatic Go.
 type Node struct {
@@ -31,6 +34,15 @@ type Node struct {
 	worldMatrix Mat4
 	localDirty  bool
 	worldDirty  bool
+
+	// Transform snapshots let the lazy matrix accessors detect callers that
+	// mutate the public transform fields directly instead of using the setters.
+	// The fields remain public for compatibility, so a setter cannot be the only
+	// source of dirty state.
+	lastPosition      Vec3
+	lastRotation      Euler
+	lastScale         Vec3
+	transformSnapshot bool
 
 	// UserData holds arbitrary application-specific data attached to this node.
 	userData any
@@ -144,11 +156,16 @@ func (n *Node) SetScale(s Vec3) {
 //
 // Local = Translate(Position) * Rotate(QuatFromEuler(Rotation)) * Scale(Scale)
 func (n *Node) LocalMatrix() Mat4 {
+	n.syncTransformState()
 	if n.localDirty {
 		t := Mat4Translate(n.Position)
 		r := Mat4FromQuat(QuatFromEuler(n.Rotation))
 		s := Mat4Scale(n.Scale)
 		n.localMatrix = t.Mul(r).Mul(s)
+		n.lastPosition = n.Position
+		n.lastRotation = n.Rotation
+		n.lastScale = n.Scale
+		n.transformSnapshot = true
 		n.localDirty = false
 	}
 	return n.localMatrix
@@ -158,16 +175,57 @@ func (n *Node) LocalMatrix() Mat4 {
 // as parent.WorldMatrix() * node.LocalMatrix(). If there is no parent, the
 // world matrix equals the local matrix. Recomputed lazily when dirty.
 func (n *Node) WorldMatrix() Mat4 {
+	n.syncTransformState()
+
+	// A parent can also have been changed through its public fields. Resolve
+	// it before returning a cached child matrix so that the parent's dirty
+	// propagation is observed even when the child itself is otherwise clean.
+	var parentWorld Mat4
+	if n.parent != nil {
+		parentWorld = n.parent.WorldMatrix()
+	}
+
 	if n.worldDirty {
 		local := n.LocalMatrix()
 		if n.parent != nil {
-			n.worldMatrix = n.parent.WorldMatrix().Mul(local)
+			n.worldMatrix = parentWorld.Mul(local)
 		} else {
 			n.worldMatrix = local
 		}
 		n.worldDirty = false
 	}
 	return n.worldMatrix
+}
+
+// syncTransformState detects direct mutations of Position, Rotation, and
+// Scale. The public fields predate the setters and cannot be made private
+// without breaking callers, so matrix access must validate them before using
+// cached values. Dirty propagation still happens only when a value actually
+// differs from the last computed local matrix.
+func (n *Node) syncTransformState() {
+	if n.transformSnapshot &&
+		sameVec3Bits(n.Position, n.lastPosition) &&
+		sameEulerBits(n.Rotation, n.lastRotation) &&
+		sameVec3Bits(n.Scale, n.lastScale) {
+		return
+	}
+	n.markLocalDirty()
+}
+
+// sameVec3Bits compares the exact float representation, including NaN
+// payloads. Go's == treats NaN as unequal to itself, which would otherwise
+// dirty and recompute a matrix on every accessor after a caller assigns an
+// unchanged NaN transform.
+func sameVec3Bits(a, b Vec3) bool {
+	return math.Float32bits(a.X) == math.Float32bits(b.X) &&
+		math.Float32bits(a.Y) == math.Float32bits(b.Y) &&
+		math.Float32bits(a.Z) == math.Float32bits(b.Z)
+}
+
+func sameEulerBits(a, b Euler) bool {
+	return math.Float32bits(a.X) == math.Float32bits(b.X) &&
+		math.Float32bits(a.Y) == math.Float32bits(b.Y) &&
+		math.Float32bits(a.Z) == math.Float32bits(b.Z)
 }
 
 // WorldPosition returns the world-space position by extracting column 3 of the
