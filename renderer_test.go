@@ -74,6 +74,92 @@ func TestLightFromNodeWithoutLight(t *testing.T) {
 	}
 }
 
+func TestBuildFrameUniformsCollectsAmbientOnceAlongsideDirectional(t *testing.T) {
+	scene := NewScene()
+
+	ambient := NewAmbientLight(WithLightIntensity(0.25))
+	ambientNode := NewNode()
+	ambientNode.SetUserData(ambient)
+	scene.Add(ambientNode)
+
+	directional := NewDirectionalLight(WithLightIntensity(0.75))
+	scene.Add(directional.LightNode())
+
+	camera := NewPerspectiveCamera(60, 1, 0.1, 100)
+	var renderer Renderer
+	data := renderer.buildFrameUniforms(scene, camera, Vec3{})
+
+	if data.LightCount != 2 {
+		t.Fatalf("LightCount = %d, want 2 (one ambient and one directional)", data.LightCount)
+	}
+	if got := data.Lights[0].LightType; got != uint32(LightKindAmbient) {
+		t.Errorf("Lights[0].LightType = %d, want ambient (%d)", got, LightKindAmbient)
+	}
+	if got := data.Lights[0].Intensity; got != ambient.Intensity() {
+		t.Errorf("Lights[0].Intensity = %f, want %f", got, ambient.Intensity())
+	}
+	if got := data.Lights[1].LightType; got != uint32(LightKindDirectional) {
+		t.Errorf("Lights[1].LightType = %d, want directional (%d)", got, LightKindDirectional)
+	}
+	if got := data.Lights[1].Intensity; got != directional.Intensity() {
+		t.Errorf("Lights[1].Intensity = %f, want %f", got, directional.Intensity())
+	}
+}
+
+func TestBuildFrameUniformsIncludesVisibleNestedAmbient(t *testing.T) {
+	scene := NewScene()
+	group := NewGroup()
+	scene.Add(&group.Node)
+
+	ambient := NewAmbientLight(WithLightIntensity(0.4))
+	ambientNode := NewNode()
+	ambientNode.SetUserData(ambient)
+	group.Add(ambientNode)
+
+	camera := NewPerspectiveCamera(60, 1, 0.1, 100)
+	var renderer Renderer
+	data := renderer.buildFrameUniforms(scene, camera, Vec3{})
+
+	if data.LightCount != 1 {
+		t.Fatalf("LightCount = %d, want 1 for one visible nested ambient", data.LightCount)
+	}
+	if got := data.Lights[0].LightType; got != uint32(LightKindAmbient) {
+		t.Errorf("Lights[0].LightType = %d, want ambient (%d)", got, LightKindAmbient)
+	}
+}
+
+func TestBuildFrameUniformsSkipsInvisibleAmbientSubtrees(t *testing.T) {
+	scene := NewScene()
+
+	hiddenAmbient := NewAmbientLight()
+	hiddenAmbientNode := NewNode()
+	hiddenAmbientNode.SetUserData(hiddenAmbient)
+	hiddenAmbientNode.SetVisible(false)
+	scene.Add(hiddenAmbientNode)
+
+	hiddenGroup := NewGroup()
+	hiddenGroup.SetVisible(false)
+	nestedAmbient := NewAmbientLight()
+	nestedAmbientNode := NewNode()
+	nestedAmbientNode.SetUserData(nestedAmbient)
+	hiddenGroup.Add(nestedAmbientNode)
+	scene.Add(&hiddenGroup.Node)
+
+	directional := NewDirectionalLight()
+	scene.Add(directional.LightNode())
+
+	camera := NewPerspectiveCamera(60, 1, 0.1, 100)
+	var renderer Renderer
+	data := renderer.buildFrameUniforms(scene, camera, Vec3{})
+
+	if data.LightCount != 1 {
+		t.Fatalf("LightCount = %d, want 1 for visible directional only", data.LightCount)
+	}
+	if got := data.Lights[0].LightType; got != uint32(LightKindDirectional) {
+		t.Errorf("Lights[0].LightType = %d, want directional (%d)", got, LightKindDirectional)
+	}
+}
+
 func TestMaterialIDDifferent(t *testing.T) {
 	m1 := NewBasicMaterial()
 	m2 := NewBasicMaterial()

@@ -287,7 +287,6 @@ func (r *Renderer) buildFrameUniforms(scene *Scene, camera Camera, cameraPos Vec
 		lightIdx++
 	})
 
-	collectAmbientLights(scene, &data, &lightIdx)
 	data.LightCount = lightIdx
 	return data
 }
@@ -826,27 +825,6 @@ type lightWithUniform interface {
 func lightFromNode(node *Node) lightWithUniform {
 	l, _ := node.UserData().(lightWithUniform)
 	return l
-}
-
-// collectAmbientLights scans the scene's direct children for AmbientLight instances
-// that are stored as UserData. Ambient lights don't have their own nodes in some
-// usage patterns, so we also accept them directly.
-func collectAmbientLights(scene *Scene, data *gpu.FrameUniformsData, lightIdx *uint32) {
-	for _, child := range scene.Children() {
-		if *lightIdx >= gpu.MaxLights {
-			return
-		}
-		if amb, ok := child.UserData().(*AmbientLight); ok {
-			lu := amb.LightUniform()
-			data.Lights[*lightIdx] = gpu.LightData{
-				Direction: lu.Direction,
-				LightType: lu.Kind,
-				Color:     lu.Color,
-				Intensity: lu.Intensity,
-			}
-			*lightIdx++
-		}
-	}
 }
 
 // mapBucket converts a g3d RenderBucket to an internal render.RenderBucket.
