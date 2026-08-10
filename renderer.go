@@ -492,6 +492,16 @@ func (r *Renderer) recordDrawCall(
 		return fmt.Errorf("create vertex buffer: %w", err)
 	}
 
+	if len(geom.Indices()) == 0 {
+		vertexCount := geom.VertexCount()
+		if vertexCount < 0 || uint64(vertexCount) > math.MaxUint32 {
+			return fmt.Errorf("invalid vertex count %d", vertexCount)
+		}
+		rp.SetVertexBuffer(0, vertBuf, 0)
+		rp.Draw(uint32(vertexCount), 1, 0, 0)
+		return nil
+	}
+
 	idxBuf, idxCount, err := r.ensureIndexBuffer(device, geom)
 	if err != nil {
 		return fmt.Errorf("create index buffer: %w", err)
