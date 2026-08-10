@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **fullscreen-overlay Wayland damage tracking** — register g3d as a separate damage source and report full-surface damage each rendered frame. gogpu now unions the 3D and gg HUD damage before present, preventing stale 3D tiles outside gg's partial damage rects on Mesa Asahi ([#22](https://github.com/gogpu/g3d/issues/22))
+
+### Changed
+- **fullscreen-overlay deps:** gogpu v0.50.2 → v0.51.0, gg v0.50.14 → v0.51.0, gpucontext v0.24.0 → v0.26.0, wgpu v0.30.37 → v0.31.0 (ADR-065 damage-source aggregation)
+
 ## [0.1.6] - 2026-08-07
 
 ### Changed

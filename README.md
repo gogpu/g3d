@@ -130,7 +130,7 @@ func main() {
 
 ### Integration (v0.1.4)
 - **GPUView widget** — embed 3D viewport inside [gogpu/ui](https://github.com/gogpu/ui) applications
-- **2D overlay compositing** — fullscreen 3D with [gogpu/gg](https://github.com/gogpu/gg) HUD overlay via `MarkExternalContent`
+- **2D overlay compositing** — fullscreen 3D with [gogpu/gg](https://github.com/gogpu/gg) HUD overlay via `MarkPreserveContent` and damage-source aggregation
 - **RenderTo** — record into caller-owned command encoder for multi-pass composition
 
 ### Planned
@@ -209,9 +209,22 @@ See [examples/viewport3d](examples/viewport3d/) for a complete working example.
 Render a 3D scene full-window, then draw 2D HUD elements on top with [gogpu/gg](https://github.com/gogpu/gg). Uses the enterprise multi-pass pattern (Unity, Bevy+egui, ImGui): 3D pass with `LoadOp::Clear`, then 2D pass with `LoadOp::Load`.
 
 ```go
+var g3dDamage gpucontext.DamageReporter
+
 app.OnDraw(func(dc *gogpu.Context) {
-    renderer.Render(scene, camera, dc.SurfaceView())
-    dc.MarkExternalContent()
+    if g3dDamage == nil {
+        g3dDamage = dc.RegisterDamageSource("g3d")
+    }
+    view := dc.SurfaceView()
+    encoder := dc.CommandEncoder()
+    if view == nil || encoder == nil {
+        return
+    }
+    if err := renderer.RenderTo(encoder, scene, camera, view); err != nil {
+        return
+    }
+    g3dDamage.ReportDamage() // Full surface: the 3D pass redraws every pixel.
+    dc.MarkPreserveContent()
     canvas.Draw(func(cc *gg.Context) { /* HUD elements */ })
     canvas.Render(dc.RenderTarget())
 })

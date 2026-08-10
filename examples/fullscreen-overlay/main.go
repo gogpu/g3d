@@ -9,13 +9,14 @@
 // Architecture (two-pass, same surface):
 //
 //	Pass 1 — g3d forward renderer (LoadOp::Clear + depth)
-//	       ↓ dc.MarkExternalContent()
+//	       ↓ g3dDamage.ReportDamage() + dc.MarkPreserveContent()
 //	Pass 2 — gg canvas overlay    (LoadOp::Load, no depth, alpha blend)
 //
-// MarkExternalContent signals gogpu that a prior render pass has already
-// written to the surface, so gg's pass uses LoadOp::Load instead of
-// LoadOp::Clear — preserving the 3D content underneath. Enterprise
-// references: Flutter InlinePassContext, Qt6 QRhi beginExternal/endExternal.
+// MarkPreserveContent makes gg's pass use LoadOp::Load instead of LoadOp::Clear,
+// preserving the 3D content underneath. The separate g3d damage source reports
+// full-surface damage for each rendered frame so gogpu unions it with gg's HUD
+// damage before presenting. Enterprise references: Flutter InlinePassContext,
+// Qt6 QRhi beginExternal/endExternal, Chromium cc DamageTracker.
 //
 // Run with different backends:
 //
@@ -64,6 +65,7 @@ func main() {
 	// --- Rendering state (lazy-initialized in OnDraw) ---
 
 	var renderer3d *g3d.Renderer
+	var g3dDamage gpucontext.DamageReporter
 	var canvas *ggcanvas.Canvas
 	var backendName string
 	var lastDrawTime time.Time
@@ -111,6 +113,7 @@ func main() {
 			if err != nil {
 				log.Fatalf("g3d: create renderer: %v", err)
 			}
+			g3dDamage = dc.RegisterDamageSource("g3d")
 			backendName = dc.Backend()
 			log.Printf("Backend: %s", backendName)
 		}
@@ -184,8 +187,12 @@ func main() {
 			return
 		}
 
-		// ---- Signal: 3D content already on the surface ----
-		dc.MarkExternalContent()
+		// The rotating 3D pass can change the whole surface. Report full damage
+		// so the compositor does not present only gg's smaller HUD damage rects.
+		g3dDamage.ReportDamage()
+
+		// ---- Signal: preserve 3D content in the following render pass ----
+		dc.MarkPreserveContent()
 
 		// ---- Pass 2: gg renders the 2D HUD overlay (LoadOp::Load) ----
 
