@@ -364,6 +364,123 @@ func TestNodeLocalMatrixCachedUntilDirty(t *testing.T) {
 	}
 }
 
+func TestNodeDirectPositionMutationRefreshesLocalMatrix(t *testing.T) {
+	n := NewNode()
+	_ = n.LocalMatrix()
+
+	n.Position = Vec3{3, 4, 5}
+	got := n.LocalMatrix().Translation()
+	want := Vec3{3, 4, 5}
+	if !approxEqualVec3(got, want, epsilon) {
+		t.Errorf("direct Position mutation: got %v, want %v", got, want)
+	}
+}
+
+func TestNodeDirectRotationMutationRefreshesLocalMatrix(t *testing.T) {
+	n := NewNode()
+	_ = n.LocalMatrix()
+
+	n.Rotation = Euler{0, math.Pi / 2, 0}
+	m := n.LocalMatrix()
+	if !approxEqual(m[0], 0, epsilon) || !approxEqual(m[2], -1, epsilon) {
+		t.Errorf("direct Rotation mutation should rotate +X toward -Z, got (%v,%v)", m[0], m[2])
+	}
+}
+
+func TestNodeDirectScaleMutationRefreshesLocalMatrix(t *testing.T) {
+	n := NewNode()
+	_ = n.LocalMatrix()
+
+	n.Scale = Vec3{2, 3, 4}
+	m := n.LocalMatrix()
+	if !approxEqual(m[0], 2, epsilon) || !approxEqual(m[5], 3, epsilon) || !approxEqual(m[10], 4, epsilon) {
+		t.Errorf("direct Scale mutation should update diagonal, got (%v,%v,%v)", m[0], m[5], m[10])
+	}
+}
+
+func TestNodeDirectParentMutationRefreshesChildWorldMatrix(t *testing.T) {
+	parent := NewNode()
+	child := NewNode()
+	child.SetPosition(Vec3{0, 5, 0})
+	parent.Add(child)
+
+	if got := child.WorldPosition(); !approxEqualVec3(got, Vec3{0, 5, 0}, epsilon) {
+		t.Fatalf("initial child WorldPosition: got %v", got)
+	}
+
+	// Mutating the parent's public field must invalidate a cached child world
+	// matrix even though no setter was called on either node.
+	parent.Position = Vec3{10, 0, 0}
+	got := child.WorldPosition()
+	want := Vec3{10, 5, 0}
+	if !approxEqualVec3(got, want, epsilon) {
+		t.Errorf("after direct parent Position mutation: got %v, want %v", got, want)
+	}
+}
+
+func TestNodeDirectGrandparentMutationRefreshesDescendantWorldMatrix(t *testing.T) {
+	grandparent := NewNode()
+	parent := NewNode()
+	child := NewNode()
+	parent.SetPosition(Vec3{0, 5, 0})
+	child.SetPosition(Vec3{0, 0, 2})
+	grandparent.Add(parent)
+	parent.Add(child)
+
+	if got := child.WorldPosition(); !approxEqualVec3(got, Vec3{0, 5, 2}, epsilon) {
+		t.Fatalf("initial child WorldPosition: got %v", got)
+	}
+
+	grandparent.Position = Vec3{10, 0, 0}
+	got := child.WorldPosition()
+	want := Vec3{10, 5, 2}
+	if !approxEqualVec3(got, want, epsilon) {
+		t.Errorf("after direct grandparent Position mutation: got %v, want %v", got, want)
+	}
+}
+
+func TestNodeCachedMatricesStayCleanWithoutTransformChanges(t *testing.T) {
+	parent := NewNode()
+	child := NewNode()
+	parent.Add(child)
+	first := child.WorldMatrix()
+	if parent.localDirty || parent.worldDirty || child.localDirty || child.worldDirty {
+		t.Fatal("matrix reads should leave a node clean")
+	}
+
+	second := child.WorldMatrix()
+	if first != second {
+		t.Error("unchanged transforms should return the cached world matrix")
+	}
+	if parent.localDirty || parent.worldDirty || child.localDirty || child.worldDirty {
+		t.Error("unchanged transform reads should not dirty either matrix")
+	}
+}
+
+func TestNodeUnchangedNaNTransformDoesNotDirtyDescendants(t *testing.T) {
+	parent := NewNode()
+	child := NewNode()
+	parent.Add(child)
+	nan := math.Float32frombits(0x7fc12345)
+	parent.Position = Vec3{nan, nan, nan}
+	parent.Rotation = Euler{nan, nan, nan}
+	parent.Scale = Vec3{nan, nan, nan}
+
+	// The first read records the exact public-field representation, including
+	// the NaN payload, in the transform snapshot.
+	_ = child.WorldMatrix()
+	if parent.localDirty || parent.worldDirty || child.localDirty || child.worldDirty {
+		t.Fatal("initial NaN transform read should leave the hierarchy clean")
+	}
+
+	// Re-reading unchanged NaN fields must not look like a new mutation. The
+	// dirty flags make this observable without relying on benchmark timing.
+	_ = parent.LocalMatrix()
+	if parent.localDirty || parent.worldDirty || child.worldDirty {
+		t.Error("unchanged NaN transform should not dirty or recompute descendants")
+	}
+}
+
 // --- WorldMatrix correctness ---
 
 func TestNodeWorldMatrixNoParent(t *testing.T) {
