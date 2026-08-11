@@ -3,7 +3,7 @@ module github.com/gogpu/g3d/examples/fullscreen-overlay
 go 1.25.0
 
 require (
-	github.com/gogpu/g3d v0.1.4
+	github.com/gogpu/g3d v0.1.8
 	github.com/gogpu/gg v0.52.2
 	github.com/gogpu/gogpu v0.52.1
 	github.com/gogpu/gpucontext v0.27.0
