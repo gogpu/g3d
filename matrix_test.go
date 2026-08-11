@@ -429,6 +429,140 @@ func TestMat4LookAt_UpAxis(t *testing.T) {
 	}
 }
 
+func TestMat4LookAt_ParallelUpProducesOrthonormalBasis(t *testing.T) {
+	// A camera directly above the target looks along -Y, which is parallel to
+	// the conventional world-up vector. The view basis must remain invertible
+	// so an orthographic or perspective projection can use it safely.
+	eye := Vec3{0, 10, 0}
+	target := Vec3{0, 0, 0}
+	view := Mat4LookAt(eye, target, Vec3{0, 1, 0})
+
+	assertLookAtBasis(t, view, eye, target)
+}
+
+func TestMat4LookAt_AntiParallelUpProducesOrthonormalBasis(t *testing.T) {
+	// Looking up from below is the anti-parallel case. It must use the same
+	// stable roll as the parallel case instead of returning a zero basis.
+	eye := Vec3{0, -10, 0}
+	target := Vec3{0, 0, 0}
+	view := Mat4LookAt(eye, target, Vec3{0, 1, 0})
+
+	assertLookAtBasis(t, view, eye, target)
+}
+
+func TestMat4LookAt_NearParallelUpUsesStableFallback(t *testing.T) {
+	// The tiny X component is below the numerical stability threshold. A
+	// fallback basis avoids magnifying that noise into an arbitrary roll.
+	eye := Vec3{0, 10, 0}
+	target := Vec3{1e-7, 0, 0}
+	view := Mat4LookAt(eye, target, Vec3{0, 1, 0})
+
+	assertLookAtBasis(t, view, eye, target)
+	parallel := Mat4LookAt(eye, Vec3{0, 0, 0}, Vec3{0, 1, 0})
+	if !approxEqualMat4(view, parallel, 1e-5) {
+		t.Errorf("near-parallel view basis should use stable fallback\n  got:  %v\n  want: %v", view, parallel)
+	}
+}
+
+func TestMat4LookAt_UpScaleDoesNotChangeParallelFallback(t *testing.T) {
+	eye := Vec3{0, 10, 0}
+	target := Vec3{0, 0, 0}
+	// The Z component is tiny relative to the up magnitude. Normalizing up
+	// first must still classify this as near-parallel with the view direction.
+	scaledUp := Mat4LookAt(eye, target, Vec3{0, 1e9, 1})
+	parallel := Mat4LookAt(eye, target, Vec3{0, 1, 0})
+	if !approxEqualMat4(scaledUp, parallel, 1e-5) {
+		t.Errorf("scaled near-parallel up changed the fallback basis\n  got:  %v\n  want: %v", scaledUp, parallel)
+	}
+}
+
+func TestMat4LookAt_ZeroUpUsesConventionalFallback(t *testing.T) {
+	eye := Vec3{0, 0, 5}
+	target := Vec3{}
+	zeroUp := Mat4LookAt(eye, target, Vec3{})
+	worldUp := Mat4LookAt(eye, target, Vec3{0, 1, 0})
+	if !approxEqualMat4(zeroUp, worldUp, 1e-5) {
+		t.Errorf("zero up should preserve conventional +Y fallback\n  got:  %v\n  want: %v", zeroUp, worldUp)
+	}
+}
+
+func TestMat4LookAt_TinyNonzeroDirectionIsPreserved(t *testing.T) {
+	eye := Vec3{}
+	target := Vec3{1e-7, 0, 0}
+	view := Mat4LookAt(eye, target, Vec3{0, 1, 0})
+	targetInView := view.MulVec4(Vec4{target.X, target.Y, target.Z, 1})
+	if !approxEqual(targetInView.X, 0, 1e-12) || !approxEqual(targetInView.Y, 0, 1e-12) {
+		t.Errorf("tiny target in view space = %v, want zero X/Y", targetInView)
+	}
+	if !approxEqual(targetInView.Z, -1e-7, 1e-12) {
+		t.Errorf("tiny target in view Z = %v, want -1e-7", targetInView.Z)
+	}
+}
+
+func TestMat4LookAt_ZeroDirectionUsesDefaultForward(t *testing.T) {
+	eye := Vec3{3, 4, 5}
+	view := Mat4LookAt(eye, eye, Vec3{0, 1, 0})
+
+	assertLookAtBasis(t, view, eye, eye.Add(Vec3{0, 0, -1}))
+	pointInView := view.MulVec4(Vec4{eye.X, eye.Y, eye.Z - 1, 1})
+	if !approxEqualVec3(pointInView.XYZ(), Vec3{0, 0, -1}, 1e-4) {
+		t.Errorf("zero-direction default forward maps point to %v, want (0,0,-1)", pointInView.XYZ())
+	}
+}
+
+func TestMat4LookAt_NonParallelDirectionPreservesOrientation(t *testing.T) {
+	eye := Vec3{2, 3, 5}
+	target := Vec3{-1, 1, -2}
+	view := Mat4LookAt(eye, target, Vec3{0, 1, 0})
+	assertLookAtBasis(t, view, eye, target)
+
+	// The target must lie on the camera's -Z axis, regardless of the eye's
+	// translation or the direction's length.
+	targetInView := view.MulVec4(Vec4{target.X, target.Y, target.Z, 1})
+	if !approxEqual(targetInView.X, 0, 1e-4) || !approxEqual(targetInView.Y, 0, 1e-4) {
+		t.Errorf("target in view space = (%v, %v), want (0, 0)", targetInView.X, targetInView.Y)
+	}
+	if targetInView.Z >= 0 {
+		t.Errorf("target should be in front of camera (negative Z), got %v", targetInView.Z)
+	}
+}
+
+func assertLookAtBasis(t *testing.T, view Mat4, eye, target Vec3) {
+	t.Helper()
+	for i, value := range view {
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			t.Fatalf("view[%d] = %v, want finite value: %v", i, value, view)
+		}
+	}
+
+	// Matrix-vector multiplication exposes the camera basis as rows (the
+	// matrix itself is stored column-major): right, up, and camera-backward.
+	right := Vec3{view[0], view[4], view[8]}
+	up := Vec3{view[1], view[5], view[9]}
+	back := Vec3{view[2], view[6], view[10]}
+	for name, axis := range map[string]Vec3{"right": right, "up": up, "back": back} {
+		if !approxEqual(axis.Length(), 1, 1e-4) {
+			t.Errorf("%s basis length = %v, want 1 (%v)", name, axis.Length(), axis)
+		}
+	}
+	if !approxEqual(right.Dot(up), 0, 1e-4) || !approxEqual(right.Dot(back), 0, 1e-4) || !approxEqual(up.Dot(back), 0, 1e-4) {
+		t.Errorf("view basis is not orthogonal: right=%v up=%v back=%v", right, up, back)
+	}
+	if !approxEqual(view.Determinant(), 1, 1e-4) {
+		t.Errorf("view determinant = %v, want 1", view.Determinant())
+	}
+	eyeInView := view.MulVec4(Vec4{eye.X, eye.Y, eye.Z, 1})
+	if !approxEqualVec3(eyeInView.XYZ(), Vec3{}, 1e-4) {
+		t.Errorf("eye in view space = %v, want origin", eyeInView.XYZ())
+	}
+	if target != eye {
+		targetInView := view.MulVec4(Vec4{target.X, target.Y, target.Z, 1})
+		if !approxEqual(targetInView.X, 0, 1e-4) || !approxEqual(targetInView.Y, 0, 1e-4) {
+			t.Errorf("target in view space = %v, want zero X/Y", targetInView)
+		}
+	}
+}
+
 func TestMat4MulVec4(t *testing.T) {
 	// Identity * v = v
 	id := Mat4Identity()
