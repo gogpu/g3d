@@ -23,7 +23,7 @@ type Geometry interface {
 	Vertices() []float32
 
 	// Indices returns the index buffer for indexed drawing.
-	// Returns nil for non-indexed geometry.
+	// Returns nil or an empty slice for non-indexed geometry.
 	Indices() []uint32
 
 	// VertexCount returns the number of vertices.
