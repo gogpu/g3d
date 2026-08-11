@@ -66,10 +66,11 @@ func (l *DirectionalLight) SetIntensity(i float32) { l.intensity = i }
 
 // Direction returns the world-space direction the light is shining towards.
 // This is computed by rotating the default forward vector (0, 0, -1) by the
-// node's world rotation (extracted from the world matrix).
+// node's world rotation. Local and ancestor scales are intentionally ignored:
+// a directional light's direction is defined by rotation, not by the scaled
+// or sheared linear part of its world matrix.
 func (l *DirectionalLight) Direction() Vec3 {
-	wm := l.node.WorldMatrix()
-	q := quatFromRotationMatrix(wm)
+	q := l.node.worldRotation()
 	// Default forward vector for a light: (0, 0, -1).
 	forward := Vec3{0, 0, -1}
 	return q.RotateVec3(forward).Normalize()

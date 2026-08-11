@@ -389,6 +389,52 @@ func TestDirectionalLightDirectionWithParent(t *testing.T) {
 	}
 }
 
+func TestDirectionalLightDirectionIgnoresLocalNonUniformScale(t *testing.T) {
+	l := NewDirectionalLight()
+	rotation := Euler{X: Radians(31), Y: Radians(-47), Z: Radians(19)}
+	l.LightNode().SetRotation(rotation)
+	l.LightNode().SetScale(Vec3{2, 3, 0.5})
+
+	want := QuatFromEuler(rotation).RotateVec3(Vec3{0, 0, -1}).Normalize()
+	if got := l.Direction(); !vec3Near(got, want, 1e-5) {
+		t.Errorf("Direction() with local non-uniform scale = %+v, want %+v", got, want)
+	}
+}
+
+func TestDirectionalLightDirectionIgnoresNegativeOrZeroScale(t *testing.T) {
+	l := NewDirectionalLight()
+	rotation := Euler{X: Radians(-18), Y: Radians(52), Z: Radians(27)}
+	l.LightNode().SetRotation(rotation)
+	want := QuatFromEuler(rotation).RotateVec3(Vec3{0, 0, -1}).Normalize()
+
+	for _, scale := range []Vec3{{-2, 3, 4}, {0, 2, 3}, {0, 0, 0}} {
+		l.LightNode().SetScale(scale)
+		if got := l.Direction(); !vec3Near(got, want, 1e-5) {
+			t.Errorf("Direction() with scale %+v = %+v, want %+v", scale, got, want)
+		}
+	}
+}
+
+func TestDirectionalLightDirectionIgnoresParentNonUniformScale(t *testing.T) {
+	group := NewGroup()
+	parentRotation := Euler{X: Radians(-23), Y: Radians(38), Z: Radians(17)}
+	group.SetRotation(parentRotation)
+	group.SetScale(Vec3{2, 0.5, 3})
+	group.SetPosition(Vec3{4, -2, 7})
+
+	l := NewDirectionalLight()
+	localRotation := Euler{X: Radians(29), Y: Radians(-41), Z: Radians(13)}
+	l.LightNode().SetRotation(localRotation)
+	l.LightNode().SetPosition(Vec3{-3, 5, 2})
+	group.Add(l.LightNode())
+
+	worldRotation := QuatFromEuler(parentRotation).Mul(QuatFromEuler(localRotation)).Normalize()
+	want := worldRotation.RotateVec3(Vec3{0, 0, -1}).Normalize()
+	if got := l.Direction(); !vec3Near(got, want, 1e-5) {
+		t.Errorf("Direction() with parent non-uniform scale = %+v, want %+v", got, want)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // DirectionalLight — LightUniform
 // ---------------------------------------------------------------------------

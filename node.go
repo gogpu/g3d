@@ -235,6 +235,19 @@ func (n *Node) WorldPosition() Vec3 {
 	return n.WorldMatrix().Translation()
 }
 
+// worldRotation composes the local rotations of n and its ancestors in the
+// same parent*local order as WorldMatrix. Node matrices are composed as
+// T * R * S, so the world matrix's linear part can contain scale and shear;
+// those terms do not belong to the node's world rotation. Scale is therefore
+// intentionally ignored, including zero and negative components.
+func (n *Node) worldRotation() Quat {
+	rotation := QuatFromEuler(n.Rotation)
+	if n.parent != nil {
+		rotation = n.parent.worldRotation().Mul(rotation)
+	}
+	return rotation.Normalize()
+}
+
 // LookAt orients the node so that its local -Z axis points at the target
 // position. The node's world position is used as the eye. The up vector is
 // {0,1,0}. This method works correctly only for nodes without rotated parents;
