@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.1.8] - 2026-08-11
+
+### Fixed
+- **Duplicate ambient lights** — `collectAmbientLights` redundantly scanned direct children after `TraverseVisible` already discovered them, causing double ambient contribution ([#26](https://github.com/gogpu/g3d/pull/26))
+- **Non-indexed geometry rendering** — `recordDrawCall` unconditionally called `DrawIndexed`, now branches to `Draw` when `Indices()` returns nil/empty ([#31](https://github.com/gogpu/g3d/pull/31))
+- **LookAt with parallel up vectors** — `Mat4LookAt` produced NaN/Inf when camera looked directly along the up vector (top-down/bottom-up views), now falls back to perpendicular axis ([#29](https://github.com/gogpu/g3d/pull/29))
+- **Stale matrices after direct transform edits** — public field mutation (`node.Position.X = 10`) bypassed dirty flags, now detected via transform snapshots on every matrix read ([#27](https://github.com/gogpu/g3d/pull/27))
+- **Directional light distorted by scale** — `Direction()` extracted quaternion from world matrix including scale, now composes quaternions directly via `worldRotation()` ([#28](https://github.com/gogpu/g3d/pull/28))
+
+### Changed
+- **deps:** wgpu v0.31.0 → v0.31.2, gputypes v0.5.1 → v0.5.2
+- **deps (examples):** gogpu v0.52.1, gg v0.52.2, gpucontext v0.27.0, ui v0.1.53, wgpu v0.31.2
+
 ## [0.1.7] - 2026-08-10
 
 ### Changed
