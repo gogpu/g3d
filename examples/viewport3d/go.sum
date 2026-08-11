@@ -6,6 +6,8 @@ github.com/go-webgpu/webgpu v0.5.5 h1:pIrXzRg0LRlNjNmR+ZNo/ERN88YaObzbCY5oYhir5S
 github.com/go-webgpu/webgpu v0.5.5/go.mod h1:vgIuNTa1UlZ4njCGY6Pmp/0c5T5o2Ml2fQ0znLc7B98=
 github.com/gogpu/g3d v0.1.4 h1:obaXKdtpV1kTCbkNWgtSS87BQGNWyniNh37hJZ65H/8=
 github.com/gogpu/g3d v0.1.4/go.mod h1:SKnPfzYbRrgdJLY+L/5R3Gi5H57I7r5gUntuIBmzPmU=
+github.com/gogpu/g3d v0.1.8 h1:lo49bQ8H4n0HbPEX+RK2dAsTbelats3x+OGCpsVArtU=
+github.com/gogpu/g3d v0.1.8/go.mod h1:qQ6031KhLYjNDUxjw62hfT2bdEAse+QJ6ht75sv6Y4U=
 github.com/gogpu/gg v0.52.2 h1:zW6uUnJH5iwD1auzTxNsOEIEpL/2vqRGcVLMLy4RDw8=
 github.com/gogpu/gg v0.52.2/go.mod h1:DkSaPtl9pBAlsAbMjzan/czzITR7ObwQtv+gB5MGd4Q=
 github.com/gogpu/gogpu v0.52.1 h1:7kUPtQY/WH8LUaqL8kh2w6y0ZSGlDvzj3hC7HzQd4Qs=
