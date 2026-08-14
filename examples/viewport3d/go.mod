@@ -3,12 +3,12 @@ module github.com/gogpu/g3d/examples/viewport3d
 go 1.25.0
 
 require (
-	github.com/gogpu/g3d v0.1.8
-	github.com/gogpu/gg v0.52.2
-	github.com/gogpu/gogpu v0.52.1
-	github.com/gogpu/gpucontext v0.27.0
-	github.com/gogpu/ui v0.1.53
-	github.com/gogpu/wgpu v0.31.2
+	github.com/gogpu/g3d v0.1.9
+	github.com/gogpu/gg v0.52.3
+	github.com/gogpu/gogpu v0.53.0
+	github.com/gogpu/gpucontext v0.28.0
+	github.com/gogpu/ui v0.1.54
+	github.com/gogpu/wgpu v0.31.4
 )
 
 require (
@@ -17,7 +17,7 @@ require (
 	github.com/go-webgpu/webgpu v0.5.5 // indirect
 	github.com/gogpu/gputypes v0.5.2 // indirect
 	github.com/gogpu/naga v0.18.0 // indirect
-	golang.org/x/image v0.44.0 // indirect
+	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
-	golang.org/x/text v0.40.0 // indirect
+	golang.org/x/text v0.41.0 // indirect
 )
