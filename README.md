@@ -180,6 +180,7 @@ GOGPU_GRAPHICS_API=software go run ./examples/hello-cube/
 | Example | Description |
 |---------|-------------|
 | [hello-cube](examples/hello-cube/) | Rotating PBR cube — minimal g3d + gogpu integration |
+| [gopher](examples/gopher/) | Go Gopher mascot from primitives — scene graph grouping, multiple materials |
 | [fullscreen-overlay](examples/fullscreen-overlay/) | Fullscreen 3D scene with 2D HUD overlay (g3d + gg) |
 | [viewport3d](examples/viewport3d/) | 3D viewport embedded inside gogpu/ui application |
 
@@ -314,7 +315,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, code standards,
 
 ## Part of the GoGPU Ecosystem
 
-g3d is part of [GoGPU](https://github.com/gogpu) — a Pure Go GPU computing ecosystem with 800K+ lines of code.
+g3d is part of [GoGPU](https://github.com/gogpu) — a Pure Go GPU ecosystem with 1.25M+ lines of code.
 
 | Library | Purpose |
 |:--------|:--------|

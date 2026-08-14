@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.9] - 2026-08-14
+
+### Added
+- **gopher example** — 3D Go Gopher mascot assembled from basic primitives (spheres + boxes), demonstrating hierarchical scene graph with `Group`, multiple PBR materials, 3-light setup, and `dt`-based rotation animation
+
+### Changed
+- **deps:** wgpu v0.31.2 → v0.31.4, gpucontext v0.27.0 → v0.28.0
+
 ## [0.1.8] - 2026-08-11
 
 ### Fixed
@@ -150,7 +158,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Example**
 - `examples/hello-cube/` — rotating lit cube demonstrating full g3d API
 
-[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.9...HEAD
+[0.1.9]: https://github.com/gogpu/g3d/compare/v0.1.8...v0.1.9
+[0.1.8]: https://github.com/gogpu/g3d/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/gogpu/g3d/compare/v0.1.6...v0.1.7
+[0.1.6]: https://github.com/gogpu/g3d/compare/v0.1.5...v0.1.6
+[0.1.5]: https://github.com/gogpu/g3d/compare/v0.1.4...v0.1.5
+[0.1.4]: https://github.com/gogpu/g3d/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/gogpu/g3d/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/gogpu/g3d/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/gogpu/g3d/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/gogpu/g3d/releases/tag/v0.1.0
