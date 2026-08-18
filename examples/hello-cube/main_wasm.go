@@ -1,5 +1,14 @@
 //go:build js && wasm
 
+// Command hello-cube renders a lit, rotating cube in the browser using g3d + WebGPU.
+//
+// This is the browser entry point for the hello-cube example. It demonstrates:
+//   - Scene graph setup (scene, mesh, lights, camera)
+//   - PBR material with functional options
+//   - Forward renderer with depth testing
+//   - dt-based animation (smooth on any refresh rate)
+//   - Browser resize handling (canvas backing size + camera aspect)
+//   - WebGPU surface and GPU resource lifecycle
 package main
 
 import (
@@ -39,6 +48,8 @@ func (p *browserProvider) AdapterInfo() gpucontext.AdapterInfo {
 	return gpucontext.AdapterInfo{Type: gpucontext.AdapterTypeUnknown}
 }
 
+// getDimensions returns the canvas backing-store dimensions in physical pixels.
+// The device-pixel ratio keeps the rendered image sharp on HiDPI displays.
 func getDimensions() (width, height uint32) {
 	win := js.Global().Get("window")
 	dpr := win.Get("devicePixelRatio").Float()
@@ -62,6 +73,8 @@ func getDimensions() (width, height uint32) {
 	return pixelWidth, pixelHeight
 }
 
+// updateCanvasSize updates the canvas backing size, camera aspect ratio, and
+// renderer depth buffer when the browser viewport changes.
 func updateCanvasSize(canvas js.Value, renderer *g3d.Renderer, camera *g3d.PerspectiveCamera) {
 	pixelWidth, pixelHeight := getDimensions()
 
@@ -71,6 +84,7 @@ func updateCanvasSize(canvas js.Value, renderer *g3d.Renderer, camera *g3d.Persp
 	renderer.SetSize(pixelWidth, pixelHeight)
 }
 
+// renderFrame acquires the current browser surface texture and renders one frame.
 func renderFrame(surface *wgpu.Surface, renderer *g3d.Renderer, scene *g3d.Scene, camera *g3d.PerspectiveCamera) {
 	texture, _, err := surface.GetCurrentTexture()
 	if err != nil {
@@ -90,12 +104,14 @@ func renderFrame(surface *wgpu.Surface, renderer *g3d.Renderer, scene *g3d.Scene
 }
 
 func main() {
+	// Locate the canvas used as the WebGPU surface.
 	document := js.Global().Get("document")
 	canvas := document.Call("getElementById", "canvas")
 	if canvas.IsUndefined() || canvas.IsNull() {
 		log.Fatal("hello-cube: canvas element not found")
 	}
 
+	// Create the WebGPU instance, surface, adapter, and device.
 	instance, err := wgpu.CreateInstance(nil)
 	if err != nil {
 		log.Fatal(err)
@@ -113,6 +129,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Configure the surface once with the initial browser dimensions.
 	caps := adapter.GetSurfaceCapabilities(surface)
 	if len(caps.Formats) == 0 || len(caps.AlphaModes) == 0 {
 		log.Fatal("hello-cube: WebGPU surface has no supported configuration")
@@ -128,6 +145,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// Create the g3d renderer after the browser GPU device is ready.
 	provider := &browserProvider{device: device, adapter: adapter, format: format}
 	renderer, err := g3d.NewRenderer(provider)
 	if err != nil {
@@ -135,9 +153,11 @@ func main() {
 	}
 	defer renderer.Release()
 
+	// Scene setup runs once before the first animation frame.
 	scene, camera, cube := buildScene()
 	updateCanvasSize(canvas, renderer, camera)
 
+	// Resize: update canvas backing dimensions, camera aspect ratio, and depth buffer.
 	resize := js.FuncOf(func(this js.Value, args []js.Value) any {
 		updateCanvasSize(canvas, renderer, camera)
 		return nil
@@ -145,6 +165,7 @@ func main() {
 	defer resize.Release()
 	js.Global().Call("addEventListener", "resize", resize)
 
+	// Browser animation loop: update the scene, render, and schedule the next frame.
 	last := time.Now()
 	var frame js.Func
 	frame = js.FuncOf(func(js.Value, []js.Value) any {
@@ -155,6 +176,7 @@ func main() {
 			dt = 1.0 / 60.0
 		}
 
+		// Rotate the cube at a constant speed regardless of frame rate.
 		updateScene(cube, dt)
 		renderFrame(surface, renderer, scene, camera)
 
@@ -162,5 +184,6 @@ func main() {
 		return nil
 	})
 	js.Global().Call("requestAnimationFrame", frame)
+	// Keep the Go program alive while requestAnimationFrame drives rendering.
 	select {}
 }
