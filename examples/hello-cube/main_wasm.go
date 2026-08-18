@@ -100,10 +100,7 @@ func main() {
 			dt = 1.0 / 60.0
 		}
 
-		rotation := cube.MeshNode().Rotation
-		rotation.Y += float32(dt)
-		rotation.X += float32(dt) * 0.3
-		cube.MeshNode().SetRotation(rotation)
+		updateScene(cube, dt)
 
 		texture, _, err := surface.GetCurrentTexture()
 		if err == nil {

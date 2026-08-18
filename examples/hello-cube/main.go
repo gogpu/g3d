@@ -46,10 +46,7 @@ func main() {
 	// We use SetRotation (not direct field mutation) to trigger the dirty
 	// flag that propagates through the scene graph transform cache.
 	app.OnUpdate(func(dt float64) {
-		r := cube.MeshNode().Rotation
-		r.Y += float32(dt)
-		r.X += float32(dt) * 0.3
-		cube.MeshNode().SetRotation(r)
+		updateScene(cube, dt)
 	})
 
 	// OnResize: update camera aspect ratio when window changes size.

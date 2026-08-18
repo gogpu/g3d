@@ -2,6 +2,13 @@ package main
 
 import "github.com/gogpu/g3d"
 
+func updateScene(cube *g3d.Mesh, dt float64) {
+	r := cube.MeshNode().Rotation
+	r.Y += float32(dt)
+	r.X += float32(dt) * 0.3
+	cube.MeshNode().SetRotation(r)
+}
+
 func buildScene() (*g3d.Scene, *g3d.PerspectiveCamera, *g3d.Mesh) {
 	scene := g3d.NewScene()
 	scene.SetBackground(g3d.RGB(0.1, 0.1, 0.15))
