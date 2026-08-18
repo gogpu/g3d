@@ -318,7 +318,7 @@ func (r *Renderer) recordFrame(
 	stencilLoadOp := gputypes.LoadOpUndefined
 	stencilStoreOp := gputypes.StoreOpUndefined
 	stencilReadOnly := true
-	if hasStencilAspect(r.depthFormat) {
+	if r.depthFormat.HasDepth() && r.depthFormat.HasStencil() {
 		stencilLoadOp = gputypes.LoadOpClear
 		stencilStoreOp = gputypes.StoreOpDiscard
 		stencilReadOnly = false
@@ -362,11 +362,6 @@ func (r *Renderer) recordFrame(
 		return fmt.Errorf("g3d: end render pass: %w", err)
 	}
 	return nil
-}
-
-func hasStencilAspect(format gputypes.TextureFormat) bool {
-	return format == gputypes.TextureFormatDepth24PlusStencil8 ||
-		format == gputypes.TextureFormatDepth32FloatStencil8
 }
 
 // drawBucket records draw commands for a sorted slice of draw calls.
