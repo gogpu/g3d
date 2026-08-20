@@ -17,6 +17,10 @@
 package main
 
 import (
+	"bytes"
+	_ "embed"
+	"image"
+	"image/draw"
 	"log"
 
 	"github.com/gogpu/g3d"
@@ -62,6 +66,11 @@ func main() {
 	})
 	scene.Add(sun.LightNode())
 
+	tex, err := LoadTexture()
+	if err != nil {
+		panic(err)
+	}
+
 	// Mesh: a unit cube with PBR material (metallic-roughness model).
 	cube := g3d.NewMesh(
 		g3d.NewBoxGeometry(1, 1, 1),
@@ -70,6 +79,7 @@ func main() {
 			g3d.WithMetallic(0.3),
 			g3d.WithRoughness(0.6),
 		),
+		tex,
 	)
 	scene.Add(cube.MeshNode())
 
@@ -129,7 +139,7 @@ func main() {
 			return // Surface not available (minimized window)
 		}
 
-		if err := renderer.Render(scene, camera, view); err != nil {
+		if err := renderer.Render(ctx, scene, camera, view); err != nil {
 			log.Printf("g3d: render error: %v", err)
 		}
 	})
@@ -146,3 +156,27 @@ func main() {
 		log.Fatalf("gogpu: %v", err)
 	}
 }
+
+func LoadTexture() (*g3d.Texture, error) {
+	img, _, err := image.Decode(bytes.NewBuffer(texture))
+	if err != nil {
+		return nil, err
+	}
+
+	bounds := img.Bounds()
+	width := bounds.Dx()
+	height := bounds.Dy()
+
+	var rgba *image.RGBA
+	if r, ok := img.(*image.RGBA); ok {
+		rgba = r
+	} else {
+		rgba = image.NewRGBA(bounds)
+		draw.Draw(rgba, bounds, img, bounds.Min, draw.Src)
+	}
+
+	return g3d.NewTexture(rgba.Pix, width, height)
+}
+
+//go:embed anonymous.jpg
+var texture []byte

@@ -1,5 +1,7 @@
 package g3d
 
+import "fmt"
+
 // Mesh combines a Geometry and a Material into a renderable scene object.
 // It participates in the scene graph via an internal Node (accessed through
 // MeshNode) and provides the data the Renderer needs to issue draw calls.
@@ -20,6 +22,7 @@ type Mesh struct {
 	node     Node
 	geometry Geometry
 	material Material
+	texture  *Texture
 }
 
 // NewMesh creates a Mesh from a Geometry and a Material. The internal Node is
@@ -27,11 +30,12 @@ type Mesh struct {
 //
 // Both geometry and material may be nil at construction time, allowing deferred
 // setup. The Renderer will skip meshes that have a nil geometry or material.
-func NewMesh(geometry Geometry, material Material) *Mesh {
+func NewMesh(geometry Geometry, material Material, texture *Texture) *Mesh {
 	m := &Mesh{
 		node:     *NewNode(),
 		geometry: geometry,
 		material: material,
+		texture:  texture,
 	}
 	m.node.SetName("Mesh")
 	// Store self as UserData so the renderer can discover meshes during scene traversal.
@@ -79,4 +83,17 @@ func (m *Mesh) WorldBoundingBox() AABB {
 		return AABB{}
 	}
 	return m.geometry.BoundingBox().Transform(m.node.WorldMatrix())
+}
+
+type Texture struct {
+	data          []byte
+	width, height int
+}
+
+func NewTexture(data []byte, width, height int) (*Texture, error) {
+	expectedSize := width * height * 4
+	if len(data) != expectedSize {
+		return nil, fmt.Errorf("invalid data size: expected %d bytes, got %d", expectedSize, len(data))
+	}
+	return &Texture{data: data, height: height, width: width}, nil
 }
