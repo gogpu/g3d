@@ -51,9 +51,13 @@ type Renderer struct {
 	// Grow-only pools for per-object GPU resources.
 	// Pools expand when more meshes are visible than the previous high-water mark.
 	// Buffers are updated via queue.WriteBuffer(), never recreated per-frame.
-	objectUniformBufs   []*wgpu.Buffer    // per-mesh model+normal matrix
-	materialUniformBufs []*wgpu.Buffer    // per-mesh material properties
-	objectBindGroups    []*wgpu.BindGroup // per-mesh bind group (group 1)
+	objectUniformBufs   []*wgpu.Buffer // per-mesh model+normal matrix
+	materialUniformBufs []*wgpu.Buffer // per-mesh material properties
+
+	objectsTextures     []*wgpu.Texture     // per-mesh textures
+	objectsTextureViews []*wgpu.TextureView // per-mesh texture views
+
+	objectBindGroups []*wgpu.BindGroup // per-mesh bind group (group 1)
 
 	// Cached geometry GPU buffers keyed by Geometry pointer identity.
 	// Vertex/index data is static, so buffers are created on first use and
@@ -464,10 +468,14 @@ func (r *Renderer) recordDrawCall(
 	}
 
 	// Upload mesh texture (NewTextureFromRGBA does all work for us).
-	texture, err := ctx.Renderer().NewTextureFromRGBA(mesh.texture.width, mesh.texture.height, mesh.texture.data)
+	tex, err := ctx.Renderer().NewTextureFromRGBA(mesh.texture.width, mesh.texture.height, mesh.texture.data)
 	if err != nil {
 		return fmt.Errorf("create texture [%d]: %w", idx, err)
 	}
+
+	textureView := tex.View()
+	r.objectsTextureViews = append(r.objectsTextureViews, textureView)
+	r.objectsTextures = append(r.objectsTextures, tex.Handle())
 
 	// Stale bind groups from the previous frame reference the same buffers with
 	// different content. Create a new bind group each frame and defer its release
@@ -483,8 +491,8 @@ func (r *Renderer) recordDrawCall(
 		Entries: []wgpu.BindGroupEntry{
 			{Binding: 0, Buffer: r.objectUniformBufs[idx], Size: uint64(len(objBytes))},
 			{Binding: 1, Buffer: r.materialUniformBufs[idx], Size: uint64(len(matBytes))},
-			{Binding: 2, TextureView: (*wgpu.TextureView)(texture.TextureView().Pointer())},
-			{Binding: 3, Sampler: texture.Sampler()},
+			{Binding: 2, TextureView: textureView},
+			{Binding: 3, Sampler: tex.Sampler()},
 		},
 	})
 	if err != nil {
@@ -740,6 +748,16 @@ func (r *Renderer) releasePersistentResources() {
 		buf.Release()
 	}
 	r.materialUniformBufs = nil
+
+	for _, tex := range r.objectsTextures {
+		tex.Release()
+	}
+	r.objectsTextures = nil
+
+	for _, view := range r.objectsTextureViews {
+		view.Release()
+	}
+	r.objectsTextureViews = nil
 
 	// Release cached geometry buffers.
 	for _, buf := range r.geomVertBufs {
