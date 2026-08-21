@@ -13,7 +13,7 @@ import (
 func TestNewMeshDefaults(t *testing.T) {
 	geom := NewBoxGeometry(1, 1, 1)
 	mat := NewStandardMaterial()
-	m := NewMesh(geom, mat, nil)
+	m := NewMesh(geom, mat)
 
 	if m.MeshNode().Name() != "Mesh" {
 		t.Errorf("expected name Mesh, got %q", m.MeshNode().Name())
@@ -36,7 +36,7 @@ func TestNewMeshDefaults(t *testing.T) {
 }
 
 func TestNewMeshNilGeometryAndMaterial(t *testing.T) {
-	m := NewMesh(nil, nil, nil)
+	m := NewMesh(nil, nil)
 
 	if m.Geometry() != nil {
 		t.Error("expected nil geometry")
@@ -52,7 +52,7 @@ func TestNewMeshNilGeometryAndMaterial(t *testing.T) {
 // --- Geometry access ---
 
 func TestMeshSetGeometry(t *testing.T) {
-	m := NewMesh(nil, nil, nil)
+	m := NewMesh(nil, nil)
 	if m.Geometry() != nil {
 		t.Fatal("expected nil geometry initially")
 	}
@@ -80,7 +80,7 @@ func TestMeshSetGeometry(t *testing.T) {
 // --- Material access ---
 
 func TestMeshSetMaterial(t *testing.T) {
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewBasicMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewBasicMaterial())
 	if m.Material().ShaderID() != "basic" {
 		t.Errorf("expected basic material, got %q", m.Material().ShaderID())
 	}
@@ -100,7 +100,7 @@ func TestMeshSetMaterial(t *testing.T) {
 // --- MeshNode identity ---
 
 func TestMeshNodeReturnsSamePointer(t *testing.T) {
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	n1 := m.MeshNode()
 	n2 := m.MeshNode()
 	if n1 != n2 {
@@ -109,7 +109,7 @@ func TestMeshNodeReturnsSamePointer(t *testing.T) {
 }
 
 func TestMeshNodeTransformPropagates(t *testing.T) {
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetPosition(Vec3{3, 4, 5})
 
 	wp := m.MeshNode().WorldPosition()
@@ -123,7 +123,7 @@ func TestMeshNodeTransformPropagates(t *testing.T) {
 
 func TestMeshWorldBoundingBoxIdentity(t *testing.T) {
 	// Unit cube centered at origin: AABB should be [-0.5, 0.5] on all axes.
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 
 	bb := m.WorldBoundingBox()
 	wantMin := Vec3{-0.5, -0.5, -0.5}
@@ -137,7 +137,7 @@ func TestMeshWorldBoundingBoxIdentity(t *testing.T) {
 }
 
 func TestMeshWorldBoundingBoxTranslated(t *testing.T) {
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetPosition(Vec3{10, 0, 0})
 
 	bb := m.WorldBoundingBox()
@@ -152,7 +152,7 @@ func TestMeshWorldBoundingBoxTranslated(t *testing.T) {
 }
 
 func TestMeshWorldBoundingBoxScaled(t *testing.T) {
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetScale(Vec3{2, 3, 4})
 
 	bb := m.WorldBoundingBox()
@@ -169,7 +169,7 @@ func TestMeshWorldBoundingBoxScaled(t *testing.T) {
 func TestMeshWorldBoundingBoxRotated(t *testing.T) {
 	// Rotate a unit cube 45 degrees around Y axis.
 	// The AABB should grow because the rotated cube has a larger footprint.
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetRotation(Euler{0, math.Pi / 4, 0})
 
 	bb := m.WorldBoundingBox()
@@ -192,7 +192,7 @@ func TestMeshWorldBoundingBoxWithParentTransform(t *testing.T) {
 	group.SetPosition(Vec3{5, 0, 0})
 	scene.Add(&group.Node)
 
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	group.Add(m.MeshNode())
 
 	scene.UpdateWorldTransforms()
@@ -209,7 +209,7 @@ func TestMeshWorldBoundingBoxWithParentTransform(t *testing.T) {
 }
 
 func TestMeshWorldBoundingBoxNilGeometry(t *testing.T) {
-	m := NewMesh(nil, NewStandardMaterial(), nil)
+	m := NewMesh(nil, NewStandardMaterial())
 	bb := m.WorldBoundingBox()
 	zero := AABB{}
 	if bb != zero {
@@ -221,7 +221,7 @@ func TestMeshWorldBoundingBoxNilGeometry(t *testing.T) {
 
 func TestMeshAddToScene(t *testing.T) {
 	scene := NewScene()
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	scene.Add(m.MeshNode())
 
 	if scene.ChildCount() != 1 {
@@ -234,9 +234,9 @@ func TestMeshAddToScene(t *testing.T) {
 
 func TestMeshTraversedInScene(t *testing.T) {
 	scene := NewScene()
-	m1 := NewMesh(NewBoxGeometry(1, 1, 1), NewBasicMaterial(), nil)
+	m1 := NewMesh(NewBoxGeometry(1, 1, 1), NewBasicMaterial())
 	m1.MeshNode().SetName("mesh1")
-	m2 := NewMesh(NewBoxGeometry(2, 2, 2), NewStandardMaterial(), nil)
+	m2 := NewMesh(NewBoxGeometry(2, 2, 2), NewStandardMaterial())
 	m2.MeshNode().SetName("mesh2")
 	scene.Add(m1.MeshNode())
 	scene.Add(m2.MeshNode())
@@ -261,7 +261,7 @@ func TestMeshInGroupHierarchy(t *testing.T) {
 	group.SetScale(Vec3{2, 2, 2})
 	scene.Add(&group.Node)
 
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetPosition(Vec3{0, 1, 0})
 	group.Add(m.MeshNode())
 
@@ -277,7 +277,7 @@ func TestMeshInGroupHierarchy(t *testing.T) {
 
 func TestMeshVisibilitySkip(t *testing.T) {
 	scene := NewScene()
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetVisible(false)
 	scene.Add(m.MeshNode())
 
@@ -290,7 +290,7 @@ func TestMeshVisibilitySkip(t *testing.T) {
 
 func TestMeshRemoveFromScene(t *testing.T) {
 	scene := NewScene()
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	scene.Add(m.MeshNode())
 	scene.Remove(m.MeshNode())
 
@@ -306,8 +306,8 @@ func TestMeshRemoveFromScene(t *testing.T) {
 
 func TestMeshesShareGeometry(t *testing.T) {
 	shared := NewBoxGeometry(1, 1, 1)
-	m1 := NewMesh(shared, NewBasicMaterial(), nil)
-	m2 := NewMesh(shared, NewStandardMaterial(), nil)
+	m1 := NewMesh(shared, NewBasicMaterial())
+	m2 := NewMesh(shared, NewStandardMaterial())
 
 	if m1.Geometry() != m2.Geometry() {
 		t.Error("both meshes should reference the same geometry")
@@ -316,8 +316,8 @@ func TestMeshesShareGeometry(t *testing.T) {
 
 func TestMeshesShareMaterial(t *testing.T) {
 	shared := NewStandardMaterial()
-	m1 := NewMesh(NewBoxGeometry(1, 1, 1), shared, nil)
-	m2 := NewMesh(NewBoxGeometry(2, 2, 2), shared, nil)
+	m1 := NewMesh(NewBoxGeometry(1, 1, 1), shared)
+	m2 := NewMesh(NewBoxGeometry(2, 2, 2), shared)
 
 	if m1.Material() != m2.Material() {
 		t.Error("both meshes should reference the same material")
@@ -327,7 +327,7 @@ func TestMeshesShareMaterial(t *testing.T) {
 // --- UserData on mesh node ---
 
 func TestMeshNodeUserData(t *testing.T) {
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetUserData("my-mesh-id")
 
 	if m.MeshNode().UserData() != "my-mesh-id" {
@@ -341,12 +341,12 @@ func BenchmarkNewMesh(b *testing.B) {
 	geom := NewBoxGeometry(1, 1, 1)
 	mat := NewStandardMaterial()
 	for range b.N {
-		_ = NewMesh(geom, mat, nil)
+		_ = NewMesh(geom, mat)
 	}
 }
 
 func BenchmarkMeshWorldBoundingBox(b *testing.B) {
-	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(), nil)
+	m := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial())
 	m.MeshNode().SetPosition(Vec3{5, 3, 1})
 	m.MeshNode().SetScale(Vec3{2, 2, 2})
 
