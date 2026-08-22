@@ -6,10 +6,11 @@ import (
 	"os"
 
 	"github.com/gogpu/gogpu"
+	"github.com/gogpu/gputypes"
 )
 
 // LoadTexture loads a texture from a file path. Supports PNG and JPEG formats.
-func (r *Renderer) LoadTexture(ctx *gogpu.Context, path, id string) error {
+func (r *Renderer) LoadTexture(ctx *gogpu.Context, path, id string, smooth bool) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -21,16 +22,22 @@ func (r *Renderer) LoadTexture(ctx *gogpu.Context, path, id string) error {
 		return err
 	}
 
-	return r.AddTextureAsImage(ctx, img, id)
+	return r.AddTextureAsImage(ctx, img, id, smooth)
 }
 
 // AddTextureAsImage adds texture as image.
-func (r *Renderer) AddTextureAsImage(ctx *gogpu.Context, img image.Image, id string) error {
+func (r *Renderer) AddTextureAsImage(ctx *gogpu.Context, img image.Image, id string, smooth bool) error {
 	if _, has := r.textures[id]; has {
 		return fmt.Errorf("texture with id: %s is already loaded", id)
 	}
 
-	texture, err := ctx.Renderer().NewTextureFromImage(img)
+	options := gogpu.DefaultTextureOptions()
+	if !smooth {
+		options.MagFilter = gputypes.FilterModeNearest
+		options.MinFilter = gputypes.FilterModeNearest
+	}
+
+	texture, err := ctx.Renderer().NewTextureFromImageWithOptions(img, options)
 	if err != nil {
 		return err
 	}
