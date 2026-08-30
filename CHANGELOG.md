@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.10] - 2026-08-30
+
+### Fixed
+- **Stencil operations for depth-only formats** — configure `StencilLoadOp`/`StencilStoreOp` based on depth format: `Undefined` + `StencilReadOnly: true` for `Depth24Plus` (no stencil aspect), normal stencil ops for `Depth24PlusStencil8` and `Depth32FloatStencil8`. Fixes WebGPU browser validation rejection ([#38](https://github.com/gogpu/g3d/pull/38), contributed by [@tarmo888](https://github.com/tarmo888))
+- **Writable mapped-range API** — migrated `createVertexBuffer`/`createIndexBuffer` from `Bytes()` to `BytesMut()` + `Flush()` for cross-backend compatibility (browser backend requires explicit flush) ([#38](https://github.com/gogpu/g3d/pull/38), contributed by [@tarmo888](https://github.com/tarmo888))
+
+### Changed
+- **deps:** wgpu v0.31.4 → v0.33.0, gpucontext v0.28.0 → v0.31.2, gputypes v0.5.2 → v0.7.0, naga v0.18.0 → v0.19.0
+- **deps:** removed stale `gogpu` direct dependency (g3d only depends down: wgpu, gpucontext, gputypes)
+
 ## [0.1.9] - 2026-08-14
 
 ### Added
@@ -158,7 +168,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Example**
 - `examples/hello-cube/` — rotating lit cube demonstrating full g3d API
 
-[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.10...HEAD
+[0.1.10]: https://github.com/gogpu/g3d/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/gogpu/g3d/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/gogpu/g3d/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/gogpu/g3d/compare/v0.1.6...v0.1.7
