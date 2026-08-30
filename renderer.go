@@ -315,6 +315,14 @@ func (r *Renderer) recordFrame(
 	}
 
 	bg := scene.Background
+	stencilLoadOp := gputypes.LoadOpUndefined
+	stencilStoreOp := gputypes.StoreOpUndefined
+	stencilReadOnly := true
+	if r.depthFormat.HasDepth() && r.depthFormat.HasStencil() {
+		stencilLoadOp = gputypes.LoadOpClear
+		stencilStoreOp = gputypes.StoreOpDiscard
+		stencilReadOnly = false
+	}
 	renderPass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		Label: "g3d_forward",
 		ColorAttachments: []wgpu.RenderPassColorAttachment{
@@ -330,8 +338,9 @@ func (r *Renderer) recordFrame(
 			DepthLoadOp:     gputypes.LoadOpClear,
 			DepthStoreOp:    gputypes.StoreOpStore,
 			DepthClearValue: 1.0,
-			StencilLoadOp:   gputypes.LoadOpClear,
-			StencilStoreOp:  gputypes.StoreOpDiscard,
+			StencilLoadOp:   stencilLoadOp,
+			StencilStoreOp:  stencilStoreOp,
+			StencilReadOnly: stencilReadOnly,
 		},
 	})
 	if err != nil {
@@ -766,11 +775,14 @@ func createVertexBuffer(device *wgpu.Device, geom Geometry) (*wgpu.Buffer, error
 		return nil, err
 	}
 
-	dst := mapped.Bytes()
+	dst := mapped.BytesMut()
 	for i, v := range verts {
 		binary.LittleEndian.PutUint32(dst[i*4:(i+1)*4], math.Float32bits(v))
 	}
-
+	if err := mapped.Flush(); err != nil {
+		buf.Release()
+		return nil, err
+	}
 	if err := buf.Unmap(); err != nil {
 		buf.Release()
 		return nil, err
@@ -805,11 +817,14 @@ func createIndexBuffer(device *wgpu.Device, geom Geometry) (*wgpu.Buffer, uint32
 		return nil, 0, err
 	}
 
-	dst := mapped.Bytes()
+	dst := mapped.BytesMut()
 	for i, idx := range indices {
 		binary.LittleEndian.PutUint32(dst[i*4:(i+1)*4], idx)
 	}
-
+	if err := mapped.Flush(); err != nil {
+		buf.Release()
+		return nil, 0, err
+	}
 	if err := buf.Unmap(); err != nil {
 		buf.Release()
 		return nil, 0, err

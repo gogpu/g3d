@@ -6,7 +6,7 @@ require (
 	github.com/gogpu/gogpu v0.53.0
 	github.com/gogpu/gpucontext v0.28.0
 	github.com/gogpu/gputypes v0.5.2
-	github.com/gogpu/wgpu v0.31.4
+	github.com/gogpu/wgpu v0.31.5
 )
 
 require (
