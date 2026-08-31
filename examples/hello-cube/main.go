@@ -129,7 +129,7 @@ func main() {
 			return // Surface not available (minimized window)
 		}
 
-		if err := renderer.Render(scene, camera, view); err != nil {
+		if err := renderer.Render(ctx, scene, camera, view); err != nil {
 			log.Printf("g3d: render error: %v", err)
 		}
 	})

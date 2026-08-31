@@ -1,13 +1,11 @@
-// standard.wgsl — Blinn-Phong lit shader for StandardMaterial.
-//
-// Phase 1: Blinn-Phong approximation (ambient + diffuse + specular).
-// Phase 2 will upgrade to Cook-Torrance BRDF.
-// Used by StandardMaterial (ShaderID = "standard").
+// standard.wgsl — Blinn-Phong lit shader for StandardMaterial with Texture Support.
 //
 // Bind groups:
 //   Group 0, Binding 0: FrameUniforms  (per-frame, set once)
 //   Group 1, Binding 0: ObjectUniforms (per-object)
 //   Group 1, Binding 1: MaterialUniforms (per-material, 32 bytes)
+//   Group 1, Binding 2: Base Color Texture
+//   Group 1, Binding 3: Base Color Sampler
 
 // --- Uniform structs (must match Go layout byte-for-byte) ---
 
@@ -46,6 +44,8 @@ struct MaterialUniforms {
 @group(0) @binding(0) var<uniform> frame: FrameUniforms;
 @group(1) @binding(0) var<uniform> object: ObjectUniforms;
 @group(1) @binding(1) var<uniform> material: MaterialUniforms;
+@group(1) @binding(2) var base_color_texture: texture_2d<f32>;
+@group(1) @binding(3) var base_color_sampler: sampler;
 
 // --- Vertex I/O ---
 
@@ -53,7 +53,7 @@ struct VertexInput {
     @location(0) position: vec3<f32>,  // 12 bytes (offset  0)
     @location(1) normal: vec3<f32>,    // 12 bytes (offset 12)
     @location(2) uv: vec2<f32>,        //  8 bytes (offset 24)
-};                                     // Stride: 32 bytes
+};                                   // Stride: 32 bytes
 
 struct VertexOutput {
     @builtin(position) clip_position: vec4<f32>,
@@ -91,8 +91,12 @@ const LIGHT_DIRECTIONAL: u32 = 1u;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let base_color = material.color.rgb;
-    let alpha = material.color.a;
+    // texture sampling and color multiplication (tint/multiplier)
+    let tex_color = textureSample(base_color_texture, base_color_sampler, in.uv);
+    let final_color = material.color * tex_color;
+
+    let base_color = final_color.rgb;
+    let alpha = final_color.a;
 
     // Alpha test (AlphaModeMask): discard fragments below cutoff.
     if alpha < material.alpha_cutoff {

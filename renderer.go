@@ -8,6 +8,7 @@ import (
 
 	"github.com/gogpu/g3d/internal/gpu"
 	"github.com/gogpu/g3d/internal/render"
+	"github.com/gogpu/gogpu"
 	"github.com/gogpu/gpucontext"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
@@ -50,9 +51,13 @@ type Renderer struct {
 	// Grow-only pools for per-object GPU resources.
 	// Pools expand when more meshes are visible than the previous high-water mark.
 	// Buffers are updated via queue.WriteBuffer(), never recreated per-frame.
-	objectUniformBufs   []*wgpu.Buffer    // per-mesh model+normal matrix
-	materialUniformBufs []*wgpu.Buffer    // per-mesh material properties
-	objectBindGroups    []*wgpu.BindGroup // per-mesh bind group (group 1)
+	objectUniformBufs   []*wgpu.Buffer // per-mesh model+normal matrix
+	materialUniformBufs []*wgpu.Buffer // per-mesh material properties
+
+	textures     map[string]*gogpu.Texture
+	emptyTexture *gogpu.Texture
+
+	objectBindGroups []*wgpu.BindGroup // per-mesh bind group (group 1)
 
 	// Cached geometry GPU buffers keyed by Geometry pointer identity.
 	// Vertex/index data is static, so buffers are created on first use and
@@ -80,6 +85,7 @@ func NewRenderer(provider gpucontext.DeviceProvider) (*Renderer, error) {
 		gpuState:    gpu.NewGPUState(),
 		renderList:  render.NewRenderList(),
 		depthFormat: gputypes.TextureFormatDepth24Plus,
+		textures:    make(map[string]*gogpu.Texture),
 	}
 
 	if err := r.gpuState.SetDeviceProvider(provider); err != nil {
@@ -107,6 +113,7 @@ func NewRendererFromDevice(
 		renderList:    render.NewRenderList(),
 		depthFormat:   gputypes.TextureFormatDepth24Plus,
 		surfaceFormat: surfaceFormat,
+		textures:      make(map[string]*gogpu.Texture),
 	}
 
 	if err := r.gpuState.SetDeviceDirect(device, queue); err != nil {
@@ -137,7 +144,7 @@ func (r *Renderer) SetSize(width, height uint32) {
 //
 // GPU buffers are persistent (created once, updated via queue.WriteBuffer).
 // Pipeline creation is lazy and cached.
-func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureView) error {
+func (r *Renderer) Render(ctx *gogpu.Context, scene *Scene, camera Camera, targetView *wgpu.TextureView) error {
 	if err := r.validateRenderState(); err != nil {
 		return err
 	}
@@ -147,7 +154,7 @@ func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureV
 		return fmt.Errorf("g3d: create command encoder: %w", err)
 	}
 
-	if err := r.RenderTo(encoder, scene, camera, targetView); err != nil {
+	if err := r.RenderTo(ctx, encoder, scene, camera, targetView); err != nil {
 		encoder.DiscardEncoding()
 		return err
 	}
@@ -171,6 +178,7 @@ func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureV
 // must keep them valid through submission and must not use the encoder
 // concurrently.
 func (r *Renderer) RenderTo(
+	ctx *gogpu.Context,
 	encoder *wgpu.CommandEncoder,
 	scene *Scene,
 	camera Camera,
@@ -190,6 +198,13 @@ func (r *Renderer) RenderTo(
 	}
 	if err := r.validateRenderState(); err != nil {
 		return err
+	}
+	if r.emptyTexture == nil {
+		tex, err := ctx.Renderer().NewTextureFromRGBA(1, 1, []byte{0xff, 0xff, 0xff, 0xff})
+		if err != nil {
+			return fmt.Errorf("g3d: unable to create empty texture error: %w", err)
+		}
+		r.emptyTexture = tex
 	}
 
 	// Release bind groups from the previous frame. By the time a new frame
@@ -467,6 +482,11 @@ func (r *Renderer) recordDrawCall(
 		return fmt.Errorf("write material uniforms[%d]: %w", idx, err)
 	}
 
+	tex, err := r.textureById(mesh.texture)
+	if err != nil {
+		tex = r.emptyTexture
+	}
+
 	// Stale bind groups from the previous frame reference the same buffers with
 	// different content. Create a new bind group each frame and defer its release
 	// to the start of the next frame, when the GPU has finished.
@@ -481,6 +501,8 @@ func (r *Renderer) recordDrawCall(
 		Entries: []wgpu.BindGroupEntry{
 			{Binding: 0, Buffer: r.objectUniformBufs[idx], Size: uint64(len(objBytes))},
 			{Binding: 1, Buffer: r.materialUniformBufs[idx], Size: uint64(len(matBytes))},
+			{Binding: 2, TextureView: tex.View()},
+			{Binding: 3, Sampler: tex.Sampler()},
 		},
 	})
 	if err != nil {
@@ -736,6 +758,14 @@ func (r *Renderer) releasePersistentResources() {
 		buf.Release()
 	}
 	r.materialUniformBufs = nil
+
+	if r.emptyTexture != nil {
+		r.emptyTexture.Handle().Release()
+		r.emptyTexture.View().Release()
+		r.emptyTexture = nil
+	}
+
+	r.UnloadAllTextures()
 
 	// Release cached geometry buffers.
 	for _, buf := range r.geomVertBufs {

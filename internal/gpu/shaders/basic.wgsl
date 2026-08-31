@@ -4,9 +4,11 @@
 // Used by BasicMaterial (ShaderID = "basic").
 //
 // Bind groups:
-//   Group 0, Binding 0: FrameUniforms  (per-frame, set once)
-//   Group 1, Binding 0: ObjectUniforms (per-object)
-//   Group 1, Binding 1: MaterialUniforms (per-material, 16 bytes)
+//   Group 0, Binding 0: FrameUniforms
+//   Group 1, Binding 0: ObjectUniforms
+//   Group 1, Binding 1: MaterialUniforms
+//   Group 1, Binding 2: Base Color Texture
+//   Group 1, Binding 3: Base Color Sampler
 
 // --- Uniform structs (must match Go layout byte-for-byte) ---
 
@@ -41,6 +43,8 @@ struct MaterialUniforms {
 @group(0) @binding(0) var<uniform> frame: FrameUniforms;
 @group(1) @binding(0) var<uniform> object: ObjectUniforms;
 @group(1) @binding(1) var<uniform> material: MaterialUniforms;
+@group(1) @binding(2) var base_color_texture: texture_2d<f32>;
+@group(1) @binding(3) var base_color_sampler: sampler;
 
 // --- Vertex I/O ---
 
@@ -72,5 +76,9 @@ fn vs_main(in: VertexInput) -> VertexOutput {
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return material.color;
+    // Color from texture.
+    let tex_color = textureSample(base_color_texture, base_color_sampler, in.uv);
+
+    // Material color * texture Color.
+    return material.color * tex_color;
 }
