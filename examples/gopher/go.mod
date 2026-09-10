@@ -8,7 +8,7 @@ require (
 )
 
 require (
-	github.com/go-webgpu/goffi v0.6.3 // indirect
+	github.com/go-webgpu/goffi v0.6.4 // indirect
 	github.com/go-webgpu/webgpu v0.5.5 // indirect
 	github.com/gogpu/gpucontext v0.31.2 // indirect
 	github.com/gogpu/gputypes v0.7.0 // indirect

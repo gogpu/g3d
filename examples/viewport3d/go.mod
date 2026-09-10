@@ -13,7 +13,7 @@ require (
 
 require (
 	github.com/coregx/signals v0.1.1 // indirect
-	github.com/go-webgpu/goffi v0.6.3 // indirect
+	github.com/go-webgpu/goffi v0.6.4 // indirect
 	github.com/go-webgpu/webgpu v0.5.5 // indirect
 	github.com/gogpu/gputypes v0.5.2 // indirect
 	github.com/gogpu/naga v0.18.0 // indirect
