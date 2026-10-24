@@ -90,3 +90,11 @@ func (o alphaCutoffOption) applyStandard(m *StandardMaterial) { m.alphaCutoff = 
 // Fragments with alpha below this value are discarded.
 // Only affects StandardMaterial; ignored by BasicMaterial.
 func WithAlphaCutoff(cutoff float32) MaterialOption { return alphaCutoffOption{cutoff} }
+
+type textureOption struct{ id string }
+
+func (t textureOption) applyBasic(m *BasicMaterial)       { m.textureID = t.id }
+func (t textureOption) applyStandard(m *StandardMaterial) { m.textureID = t.id }
+
+// WithTexture sets texture id.
+func WithTexture(textureID string) MaterialOption { return textureOption{textureID} }

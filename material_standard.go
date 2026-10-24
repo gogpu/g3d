@@ -26,6 +26,7 @@ type StandardMaterial struct {
 	alphaCutoff float32
 	doubleSided bool
 	wireframe   bool
+	textureID   string
 }
 
 // NewStandardMaterial creates a PBR material with the given options.
@@ -113,4 +114,9 @@ func (m *StandardMaterial) UniformData() []byte {
 	binary.LittleEndian.PutUint32(buf[24:28], math.Float32bits(m.alphaCutoff))
 	// buf[28:32] is zero-initialized (padding)
 	return buf[:]
+}
+
+// TextureID returns id of the texture.
+func (m *StandardMaterial) TextureID() string {
+	return m.textureID
 }
