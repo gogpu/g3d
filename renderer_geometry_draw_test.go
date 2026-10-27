@@ -101,28 +101,22 @@ func (p *geometryRecordingRenderPass) SetIndexBuffer(
 	p.recorder.indexBufferBindings++
 }
 
-func (p *geometryRecordingRenderPass) Draw(
-	vertexCount, instanceCount, firstVertex, firstInstance uint32,
-) {
+func (p *geometryRecordingRenderPass) Draw(args gputypes.DrawArgs) {
 	p.recorder.draws = append(p.recorder.draws, geometryDrawCall{
-		vertexCount:   vertexCount,
-		instanceCount: instanceCount,
-		firstVertex:   firstVertex,
-		firstInstance: firstInstance,
+		vertexCount:   args.VertexCount,
+		instanceCount: args.InstanceCount,
+		firstVertex:   args.FirstVertex,
+		firstInstance: args.FirstInstance,
 	})
 }
 
-func (p *geometryRecordingRenderPass) DrawIndexed(
-	indexCount, instanceCount, firstIndex uint32,
-	baseVertex int32,
-	firstInstance uint32,
-) {
+func (p *geometryRecordingRenderPass) DrawIndexed(args gputypes.DrawIndexedArgs) {
 	p.recorder.indexedDraws = append(p.recorder.indexedDraws, geometryIndexedDrawCall{
-		indexCount:    indexCount,
-		instanceCount: instanceCount,
-		firstIndex:    firstIndex,
-		baseVertex:    baseVertex,
-		firstInstance: firstInstance,
+		indexCount:    args.IndexCount,
+		instanceCount: args.InstanceCount,
+		firstIndex:    args.FirstIndex,
+		baseVertex:    args.BaseVertex,
+		firstInstance: args.FirstInstance,
 	})
 }
 
