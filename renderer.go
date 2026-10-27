@@ -508,7 +508,7 @@ func (r *Renderer) recordDrawCall(
 			return fmt.Errorf("invalid vertex count %d", vertexCount)
 		}
 		rp.SetVertexBuffer(0, vertBuf, 0)
-		rp.Draw(uint32(vertexCount), 1, 0, 0)
+		rp.Draw(gputypes.DrawArgs{VertexCount: uint32(vertexCount), InstanceCount: 1})
 		return nil
 	}
 
@@ -519,7 +519,7 @@ func (r *Renderer) recordDrawCall(
 
 	rp.SetVertexBuffer(0, vertBuf, 0)
 	rp.SetIndexBuffer(idxBuf, gputypes.IndexFormatUint32, 0)
-	rp.DrawIndexed(idxCount, 1, 0, 0, 0)
+	rp.DrawIndexed(gputypes.DrawIndexedArgs{IndexCount: idxCount, InstanceCount: 1})
 
 	return nil
 }
