@@ -37,21 +37,18 @@ func NewGPUState() *GPUState {
 // an external provider (e.g., gogpu.App). The provider's Device() must return
 // a *wgpu.Device.
 //
-// This follows the gg/internal/gpu/gpu_shared.go:124-189 pattern exactly:
-//  1. Check for software adapter -> return error
-//  2. Type-assert provider.Device() to *wgpu.Device
-//  3. Get queue
-//  4. Destroy own resources if previously initialized
-//  5. Store external device, create shader + pipeline caches
-//  6. Set ready = true
+// It follows the gg/internal/gpu/gpu_shared.go:124-189 pattern, except that a
+// CPU adapter is accepted: gg falls back to its CPU rasterizer there, g3d has
+// no CPU path, so it renders on whatever device it is given — wgpu's software
+// backend, lavapipe, llvmpipe or WARP (g3d#47; ADR-001 decision 11, ADR-071).
+// Requiring a hardware adapter is the application's choice when it creates
+// the device, as in Rust wgpu and Bevy.
+//  1. Type-assert provider.Device() to *wgpu.Device
+//  2. Get queue
+//  3. Destroy own resources if previously initialized
+//  4. Store external device, create shader + pipeline caches
+//  5. Set ready = true
 func (g *GPUState) SetDeviceProvider(provider gpucontext.DeviceProvider) error {
-	// Check if adapter is software/CPU — GPU shaders require a hardware adapter.
-	if wgpuAdapter := wgpu.AdapterFromHandle(provider.Adapter()); wgpuAdapter != nil {
-		if wgpuAdapter.Info().DeviceType == gputypes.DeviceTypeCPU {
-			return fmt.Errorf("g3d: software adapter detected, GPU rendering requires a hardware adapter")
-		}
-	}
-
 	wgpuDev := wgpu.DeviceFromHandle(provider.Device())
 	if wgpuDev == nil {
 		return fmt.Errorf("g3d: provider Device is nil")
