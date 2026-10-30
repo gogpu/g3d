@@ -3,7 +3,7 @@ module github.com/gogpu/g3d/examples/gopher
 go 1.25.0
 
 require (
-	github.com/gogpu/g3d v0.1.10
+	github.com/gogpu/g3d v0.1.11
 	github.com/gogpu/gogpu v0.53.2
 )
 
