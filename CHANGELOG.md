@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Sphere rendered inside-out** — `NewSphereGeometry` generated a mirrored sphere (missing negative x versus three.js `SphereGeometry`), so its triangles were clockwise seen from outside: back-face culling removed the outer surface and the inside of the far hemisphere showed through, with wrong lighting; `WithDoubleSided(true)` showed the artifacts reported in [#46](https://github.com/gogpu/g3d/issues/46). The sphere now matches three.js: counter-clockwise front faces and `u` running left to right on the outer surface (reported by [@maugre](https://github.com/maugre))
+- **Plane texture coordinates flipped** — `NewPlaneGeometry` used a bottom-up `v`, unlike the box and sphere; it now uses the WebGPU/glTF convention (`v = 0` at the image's top row), so a texture seen from above is not mirrored
+
 ## [0.1.10] - 2026-08-30
 
 ### Fixed

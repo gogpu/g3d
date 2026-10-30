@@ -47,8 +47,11 @@ func GenerateSphere(radius float32, widthSegments, heightSegments int) (vertices
 			sinTheta := float32(math.Sin(float64(theta)))
 			cosTheta := float32(math.Cos(float64(theta)))
 
-			// Position on unit sphere, then scale by radius.
-			nx := cosTheta * sinPhi
+			// Position on unit sphere, then scale by radius. The negative x
+			// follows three.js SphereGeometry: it makes the index order below
+			// counter-clockwise seen from outside and runs u left to right on
+			// the outer surface. Without it the sphere is mirrored (g3d#46).
+			nx := -cosTheta * sinPhi
 			ny := cosPhi
 			nz := sinTheta * sinPhi
 
