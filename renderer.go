@@ -73,8 +73,10 @@ type Renderer struct {
 }
 
 // NewRenderer creates a Renderer using a shared GPU device from a DeviceProvider
-// (e.g., gogpu.App). Returns an error if the provider has a software adapter
-// or the device type is incompatible.
+// (e.g., gogpu.App). Any adapter type is accepted, including CPU adapters
+// (wgpu's software backend, lavapipe, llvmpipe); the application decides
+// whether to require a hardware adapter. Returns an error if the provider's
+// device or queue is nil.
 func NewRenderer(provider gpucontext.DeviceProvider) (*Renderer, error) {
 	r := &Renderer{
 		gpuState:    gpu.NewGPUState(),
