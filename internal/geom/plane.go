@@ -16,16 +16,19 @@ func GeneratePlane(width, height float32) (vertices []float32, indices []uint32)
 	// Normal: straight up (+Y).
 	const nx, ny, nz float32 = 0, 1, 0
 
-	// 4 vertices with UV mapping:
-	// V0 (-X, -Z) = UV(0, 1)  — back-left
-	// V1 (+X, -Z) = UV(1, 1)  — back-right
-	// V2 (+X, +Z) = UV(1, 0)  — front-right
-	// V3 (-X, +Z) = UV(0, 0)  — front-left
+	// 4 vertices with UV mapping. UV origin is the image's top-left with v
+	// growing downward (WebGPU/glTF, same as box and sphere): seen from above
+	// with -Z up, the texture appears unmirrored. This equals three.js
+	// PlaneGeometry rotated -90° about X, after its flipY convention.
+	// V0 (-X, -Z) = UV(0, 0)  — back-left
+	// V1 (+X, -Z) = UV(1, 0)  — back-right
+	// V2 (+X, +Z) = UV(1, 1)  — front-right
+	// V3 (-X, +Z) = UV(0, 1)  — front-left
 	vertices = make([]float32, 0, 4*FloatsPerVertex)
-	vertices = appendVertex(vertices, -hw, 0, -hh, nx, ny, nz, 0, 1) // V0
-	vertices = appendVertex(vertices, hw, 0, -hh, nx, ny, nz, 1, 1)  // V1
-	vertices = appendVertex(vertices, hw, 0, hh, nx, ny, nz, 1, 0)   // V2
-	vertices = appendVertex(vertices, -hw, 0, hh, nx, ny, nz, 0, 0)  // V3
+	vertices = appendVertex(vertices, -hw, 0, -hh, nx, ny, nz, 0, 0) // V0
+	vertices = appendVertex(vertices, hw, 0, -hh, nx, ny, nz, 1, 0)  // V1
+	vertices = appendVertex(vertices, hw, 0, hh, nx, ny, nz, 1, 1)   // V2
+	vertices = appendVertex(vertices, -hw, 0, hh, nx, ny, nz, 0, 1)  // V3
 
 	// Two triangles. Winding order produces +Y face normal via cross product:
 	//   E1 = V2-V0 = (+w, 0, +h), E2 = V1-V0 = (+w, 0, 0)

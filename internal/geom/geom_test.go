@@ -244,6 +244,37 @@ func TestGenerateSphere_Poles(t *testing.T) {
 	}
 }
 
+// TestGenerateSphere_MatchesThreeJSLayout pins the vertex layout to three.js
+// SphereGeometry (src/geometries/SphereGeometry.js:100-102 @ 121bd691):
+// x = -r·cos(u·2π)·sin(v·π), y = r·cos(v·π), z = r·sin(u·2π)·sin(v·π).
+// The negative x is what makes the shared index order counter-clockwise from
+// outside and u run left to right on the outer surface.
+func TestGenerateSphere_MatchesThreeJSLayout(t *testing.T) {
+	const w, h = 8, 4
+	radius := float32(2)
+	verts, _ := GenerateSphere(radius, w, h)
+
+	for y := 0; y <= h; y++ {
+		for x := 0; x <= w; x++ {
+			base := (y*(w+1) + x) * FloatsPerVertex
+			u := float64(x) / w
+			v := float64(y) / h
+			want := [3]float32{
+				float32(-float64(radius) * math.Cos(u*2*math.Pi) * math.Sin(v*math.Pi)),
+				float32(float64(radius) * math.Cos(v*math.Pi)),
+				float32(float64(radius) * math.Sin(u*2*math.Pi) * math.Sin(v*math.Pi)),
+			}
+			got := [3]float32{verts[base], verts[base+1], verts[base+2]}
+			for i := range want {
+				if !approx(got[i], want[i]) {
+					t.Errorf("vertex (x=%d, y=%d): position %v, want %v (three.js layout)", x, y, got, want)
+					break
+				}
+			}
+		}
+	}
+}
+
 func TestGenerateSphere_UVRange(t *testing.T) {
 	verts, _ := GenerateSphere(1, 32, 16)
 	count := len(verts) / FloatsPerVertex
@@ -429,6 +460,58 @@ func TestGenerateBox_WindingOrder(t *testing.T) {
 func TestGeneratePlane_WindingOrder(t *testing.T) {
 	verts, indices := GeneratePlane(1, 1)
 	verifyWindingOrder(t, "plane", verts, indices)
+}
+
+// TestGenerateSphere_WindingOrder guards the front faces of the sphere: with
+// back-face culling (CCW front, WebGPU default) a reversed winding culls the
+// outer surface and shows the inside of the far hemisphere (g3d#46).
+func TestGenerateSphere_WindingOrder(t *testing.T) {
+	verts, indices := GenerateSphere(1, 16, 8)
+	verifyWindingOrder(t, "sphere", verts, indices)
+}
+
+func TestGenerateBox_UVOrientation(t *testing.T) {
+	verts, indices := GenerateBox(1, 1, 1)
+	verifyUVOrientation(t, "box", verts, indices)
+}
+
+// TestGeneratePlane_UVOrientation: seen from above, the plane must show the
+// texture unmirrored, with v=0 at the image's top row like the box and sphere.
+func TestGeneratePlane_UVOrientation(t *testing.T) {
+	verts, indices := GeneratePlane(1, 1)
+	verifyUVOrientation(t, "plane", verts, indices)
+}
+
+// TestGenerateSphere_UVOrientation catches a mirrored sphere: flipping only the
+// index order fixes the winding but leaves textures mirrored, so both checks
+// are needed.
+func TestGenerateSphere_UVOrientation(t *testing.T) {
+	verts, indices := GenerateSphere(1, 16, 8)
+	verifyUVOrientation(t, "sphere", verts, indices)
+}
+
+// verifyUVOrientation checks that a front-facing (CCW) triangle is also CCW in
+// texture space seen with u to the right and v downward (glTF/WebGPU texture
+// convention, v=0 at the top), i.e. the texture is not mirrored on the front face.
+func verifyUVOrientation(t *testing.T, name string, verts []float32, indices []uint32) {
+	t.Helper()
+
+	uv := func(i uint32) (float32, float32) {
+		base := i*uint32(FloatsPerVertex) + uint32(OffsetUV)
+		return verts[base], verts[base+1]
+	}
+	for i := 0; i+2 < len(indices); i += 3 {
+		au, av := uv(indices[i])
+		bu, bv := uv(indices[i+1])
+		cu, cv := uv(indices[i+2])
+
+		// Signed area in (u, -v): v grows downward in texture space.
+		area := (bu-au)*(av-cv) - (av-bv)*(cu-au)
+		if area <= 0 {
+			t.Errorf("%s triangle %d [%d,%d,%d]: texture mirrored or degenerate in UV (area=%f)",
+				name, i/3, indices[i], indices[i+1], indices[i+2], area)
+		}
+	}
 }
 
 // verifyWindingOrder checks that triangle normals (from cross product) align
