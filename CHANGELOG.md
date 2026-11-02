@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **deps:** wgpu v0.33.0 → v0.34.5, gpucontext v0.31.2 → v0.31.3, gputypes v0.7.0 → v0.8.0
+- **deps:** wgpu v0.33.0 → v0.34.6, gpucontext v0.31.2 → v0.31.3, gputypes v0.7.0 → v0.8.0; indirect naga v0.19.0 → v0.20.5, goffi v0.6.3 → v0.6.8
 - **wgpu v0.34 struct-param draw API** — `Draw`/`DrawIndexed` calls now pass `gputypes.DrawArgs` / `gputypes.DrawIndexedArgs` (wgpu ADR-072); no change to g3d's public API
 - **.gitignore** aligned with the ecosystem standard: private `.pm/`, `*.wasm`, `*.prof`, `coverage.*`, `.env.*`, and root-level example binaries
 
