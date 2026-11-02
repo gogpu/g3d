@@ -167,13 +167,8 @@ func readbackRGBA8(t *testing.T, device *wgpu.Device, src *wgpu.Texture, size ui
 	if err != nil {
 		t.Fatalf("CreateCommandEncoder: %v", err)
 	}
-	enc.TransitionTextures([]wgpu.TextureBarrier{{
-		Texture: src,
-		Usage: wgpu.TextureUsageTransition{
-			OldUsage: wgpu.TextureUsageRenderAttachment,
-			NewUsage: wgpu.TextureUsageCopySrc,
-		},
-	}})
+	// No manual RenderAttachment→CopySrc barrier: since wgpu v0.34.6 the copy records CopySrc in the
+	// encoder's usage tracker, which emits the transition (Rust wgpu has no public barrier call either).
 	enc.CopyTextureToBuffer(src, staging, []wgpu.BufferTextureCopy{{
 		BufferLayout: wgpu.ImageDataLayout{BytesPerRow: bytesPerRow, RowsPerImage: size},
 		TextureBase:  wgpu.ImageCopyTexture{Texture: src},
