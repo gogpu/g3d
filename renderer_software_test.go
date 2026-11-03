@@ -110,6 +110,78 @@ func TestRenderSphereOnSoftwareBackend(t *testing.T) {
 	camera := NewPerspectiveCamera(60, 1, 0.1, 100)
 	camera.CameraNode().SetPosition(Vec3{X: 0, Y: 0, Z: 3})
 
+	pixels := renderSoftwareRGBA8(t, provider, renderer, scene, camera, size)
+	at := func(x, y uint32) [4]byte {
+		i := (y*size + x) * 4
+		return [4]byte{pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]}
+	}
+
+	if corner := at(0, 0); corner[0] > 8 || corner[1] > 8 || corner[2] > 8 {
+		t.Errorf("corner pixel = %v, want the black background", corner)
+	}
+	if center := at(size/2, size/2); center[0] < 128 || center[1] < 128 || center[2] < 128 {
+		t.Errorf("center pixel = %v, want the lit front of the sphere (each channel >= 128)", center)
+	}
+}
+
+// TestAlphaMaskDiscardOnSoftwareBackend: a masked fragment below the cutoff
+// writes neither color nor depth, so the red box behind the masked box shows
+// through at the center. wgpu's software backend ran discard as a plain
+// return, writing both, until v0.34.7 (wgpu P1-SW-016).
+func TestAlphaMaskDiscardOnSoftwareBackend(t *testing.T) {
+	const size uint32 = 64
+
+	tests := []struct {
+		name    string
+		opacity float32
+		want    func(px [4]byte) bool
+		desc    string
+	}{
+		// Control: the same box fully opaque covers the center, so the masked case
+		// below can only pass by discarding.
+		{"opaque control", 1, func(px [4]byte) bool { return px[0] >= 128 && px[1] >= 128 && px[2] >= 128 }, "the lit white box"},
+		{"below cutoff", 0.2, func(px [4]byte) bool { return px[0] >= 250 && px[1] <= 8 && px[2] <= 8 }, "the red box behind"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			provider := newSoftwareProvider(t, gputypes.TextureFormatRGBA8Unorm)
+			renderer, err := NewRenderer(provider)
+			if err != nil {
+				t.Fatalf("NewRenderer: %v", err)
+			}
+			defer renderer.Release()
+			renderer.SetSize(size, size)
+
+			scene := NewScene()
+			scene.SetBackground(Black)
+			sun := NewDirectionalLight(WithLightColor(White), WithLightIntensity(1))
+			scene.Add(sun.LightNode())
+			back := NewMesh(NewBoxGeometry(2, 2, 0.2), NewBasicMaterial(WithColor(Red)))
+			back.MeshNode().SetPosition(Vec3{Z: -1})
+			scene.Add(back.MeshNode())
+			masked := NewMesh(NewBoxGeometry(1, 1, 1), NewStandardMaterial(WithColor(White), WithRoughness(1),
+				WithOpacity(tt.opacity), WithAlphaMode(AlphaModeMask), WithAlphaCutoff(0.5)))
+			scene.Add(masked.MeshNode())
+
+			camera := NewPerspectiveCamera(60, 1, 0.1, 100)
+			camera.CameraNode().SetPosition(Vec3{Z: 3})
+
+			pixels := renderSoftwareRGBA8(t, provider, renderer, scene, camera, size)
+			i := (size/2*size + size/2) * 4
+			if center := [4]byte{pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]}; !tt.want(center) {
+				t.Errorf("center pixel = %v, want %s", center, tt.desc)
+			}
+		})
+	}
+}
+
+// renderSoftwareRGBA8 renders scene into a new size×size RGBA8 target on the
+// provider's device and returns its pixels.
+func renderSoftwareRGBA8(
+	t *testing.T, provider *softwareProvider, renderer *Renderer, scene *Scene, camera Camera, size uint32,
+) []byte {
+	t.Helper()
+
 	device := provider.device
 	target, err := device.CreateTexture(&wgpu.TextureDescriptor{
 		Label:         "g3d-software-target",
@@ -133,19 +205,7 @@ func TestRenderSphereOnSoftwareBackend(t *testing.T) {
 	if err := renderer.Render(scene, camera, view); err != nil {
 		t.Fatalf("Render: %v", err)
 	}
-
-	pixels := readbackRGBA8(t, device, target, size)
-	at := func(x, y uint32) [4]byte {
-		i := (y*size + x) * 4
-		return [4]byte{pixels[i], pixels[i+1], pixels[i+2], pixels[i+3]}
-	}
-
-	if corner := at(0, 0); corner[0] > 8 || corner[1] > 8 || corner[2] > 8 {
-		t.Errorf("corner pixel = %v, want the black background", corner)
-	}
-	if center := at(size/2, size/2); center[0] < 128 || center[1] < 128 || center[2] < 128 {
-		t.Errorf("center pixel = %v, want the lit front of the sphere (each channel >= 128)", center)
-	}
+	return readbackRGBA8(t, device, target, size)
 }
 
 func readbackRGBA8(t *testing.T, device *wgpu.Device, src *wgpu.Texture, size uint32) []byte {
