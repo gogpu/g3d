@@ -1,14 +1,25 @@
-# g3d — GoGPU Ecosystem
+# g3d
 
-> Part of the GoGPU Pure Go GPU Computing Ecosystem.
+> g3d is a Pure Go 3D rendering library, not a game engine: a scene graph of nodes with parent-child transforms, perspective and orthographic cameras, box, sphere, plane and custom buffer geometry, an unlit BasicMaterial and a StandardMaterial (metallic-roughness parameters, Blinn-Phong shading today), ambient and directional lights, and a forward renderer with frustum culling and render buckets. It draws through gogpu/wgpu, so the same code runs on Vulkan, Metal, DirectX 12, OpenGL ES and a CPU software backend. Zero CGO; Go 1.25+.
+>
+> Two ways in: `NewRenderer` takes a `gpucontext.DeviceProvider` (for example a gogpu app) and shares its device; `NewRendererFromDevice` takes a `*wgpu.Device` and queue directly. `Render` draws a scene into a texture view; `RenderTo` records into a command encoder the caller owns, for composing with gogpu/gg or gogpu/ui in one frame. Pre-1.0: the API may change before v1.0. Planned next: Cook-Torrance PBR, textures, shadows, then glTF 2.0.
 
 ## Docs
 
-- [API Reference](https://pkg.go.dev/github.com/gogpu/g3d)
-- [AGENTS.md](https://github.com/gogpu/g3d/blob/main/AGENTS.md): AI agent instructions
-- [README](https://github.com/gogpu/g3d/blob/main/README.md): Human-readable overview
+- [API reference](https://pkg.go.dev/github.com/gogpu/g3d): package documentation
+- [README](https://github.com/gogpu/g3d/blob/main/README.md): overview, features, backends, integration, roadmap
+- [AGENTS.md](https://github.com/gogpu/g3d/blob/main/AGENTS.md): notes for coding agents using g3d
+- [CHANGELOG](https://github.com/gogpu/g3d/blob/main/CHANGELOG.md): changes per release
+- [CONTRIBUTING](https://github.com/gogpu/g3d/blob/main/CONTRIBUTING.md): how to contribute
+
+## Examples
+
+- [hello-cube](https://github.com/gogpu/g3d/tree/main/examples/hello-cube): rotating lit cube, the minimal g3d + gogpu program
+- [fullscreen-overlay](https://github.com/gogpu/g3d/tree/main/examples/fullscreen-overlay): 3D scene with a 2D HUD drawn by gogpu/gg
+- [viewport3d](https://github.com/gogpu/g3d/tree/main/examples/viewport3d): 3D viewport inside a gogpu/ui application
+- [All examples](https://github.com/gogpu/g3d/tree/main/examples)
 
 ## Ecosystem
 
-- [GoGPU Ecosystem](https://github.com/gogpu/gogpu/blob/main/AGENTS.md): Full ecosystem map
-- [Open Collective](https://opencollective.com/gogpu): Support development
+- [GoGPU ecosystem](https://gogpu.dev/llms.txt): map of all modules
+- [Open Collective](https://opencollective.com/gogpu): support development
