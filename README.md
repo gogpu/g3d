@@ -130,7 +130,7 @@ func main() {
 
 ### Integration (v0.1.4)
 - **GPUView widget** — embed 3D viewport inside [gogpu/ui](https://github.com/gogpu/ui) applications
-- **2D overlay compositing** — fullscreen 3D with [gogpu/gg](https://github.com/gogpu/gg) HUD overlay via `MarkExternalContent`
+- **2D overlay compositing** — fullscreen 3D with [gogpu/gg](https://github.com/gogpu/gg) HUD overlay via `MarkPreserveContent`
 - **RenderTo** — record into caller-owned command encoder for multi-pass composition
 
 ### Planned
@@ -212,7 +212,7 @@ Render a 3D scene full-window, then draw 2D HUD elements on top with [gogpu/gg](
 ```go
 app.OnDraw(func(dc *gogpu.Context) {
     renderer.Render(scene, camera, dc.SurfaceView())
-    dc.MarkExternalContent()
+    dc.MarkPreserveContent()
     canvas.Draw(func(cc *gg.Context) { /* HUD elements */ })
     canvas.Render(dc.RenderTarget())
 })
