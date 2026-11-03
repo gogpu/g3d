@@ -7,10 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Build failure next to gogpu v0.54.0** — g3d v0.1.11 did not compile in a module that also uses gogpu v0.54.0: Go's version selection picks wgpu v0.34.x there, whose `Draw`/`DrawIndexed` take a struct argument (`too many arguments in call to rp.Draw`). This release builds against wgpu v0.34.9 and works with current gogpu
+- **Alpha-masked materials on the software backend** — fragments of an `AlphaModeMask` material below the cutoff were not discarded on wgpu's software adapter: they wrote black and depth, hiding whatever was behind them. Fixed by the wgpu v0.34.7 update; a new test renders a masked box in front of an opaque one on the software backend and checks that the back box shows through
+
 ### Changed
-- **deps:** wgpu v0.33.0 → v0.34.6, gpucontext v0.31.2 → v0.31.3, gputypes v0.7.0 → v0.8.0; indirect naga v0.19.0 → v0.20.5, goffi v0.6.3 → v0.6.8
+- **deps:** wgpu v0.33.0 → v0.34.9, gpucontext v0.31.2 → v0.31.3, gputypes v0.7.0 → v0.8.2; indirect naga v0.19.0 → v0.21.4, goffi v0.6.3 → v0.6.8. naga v0.21.3 fixes [GHSA-887q-cf99-367r](https://github.com/gogpu/naga/security/advisories/GHSA-887q-cf99-367r) (stack overflow in the WGSL parser); g3d only compiles its own built-in shaders, so it was not reachable through g3d, and the update keeps vulnerability scanners clean
 - **wgpu v0.34 struct-param draw API** — `Draw`/`DrawIndexed` calls now pass `gputypes.DrawArgs` / `gputypes.DrawIndexedArgs` (wgpu ADR-072); no change to g3d's public API
 - **.gitignore** aligned with the ecosystem standard: private `.pm/`, `*.wasm`, `*.prof`, `coverage.*`, `.env.*`, and root-level example binaries
+
+### Known issues
+- **Examples still pin the previous releases.** The example modules under `examples/` keep g3d v0.1.11 and the gogpu, gg and ui versions they were built with, because the current gg and ui releases do not build on wgpu v0.34 yet. They move to this release once gg and ui ship versions that do. Your own module is not affected: depend on g3d v0.1.12 with gogpu v0.54.0 or later
 
 ## [0.1.11] - 2026-10-30
 
