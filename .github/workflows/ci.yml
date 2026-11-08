@@ -9,9 +9,11 @@ name: CI
 # - Every action is pinned by commit SHA with a version comment. golangci-lint
 #   comes from the shared action, which caches the pinned archive: on 2026-11-08
 #   the per-job release download returned 504 for over an hour.
-# - No 386 leg: wgpu v0.34.9 does not compile for 32-bit (constant 4294967294
-#   overflows int in core/track) and goffi has no 386 syscall implementation
-#   (measured 2026-11-08: GOOS=linux GOARCH=386 go build ./... fails).
+# - 386 is build-only: wgpu v0.34.11 compiles for 32-bit again (v0.34.9 did not:
+#   constant 4294967294 overflows int in core/track), but goffi v0.6.8 ships no
+#   386 syscall files, and g3d's tests import wgpu/hal/software, so vet and the
+#   tests cannot run for this target yet (measured 2026-11-08). Add them once
+#   goffi supports 386.
 #
 # Branch Strategy (GitHub Flow):
 # - main branch: Production-ready code
@@ -62,6 +64,28 @@ jobs:
       run: go mod verify
 
     - name: Build all packages
+      run: go build ./...
+
+  # 32-bit build only: see the header note. `go build ./...` does not compile
+  # the test files, which are the ones that cannot be built for 386 today.
+  build-386:
+    name: Build - linux/386
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+    - name: Set up Go
+      uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+      with:
+        go-version: stable
+        cache: true
+
+    - name: Build all packages for 386
+      env:
+        GOOS: linux
+        GOARCH: 386
       run: go build ./...
 
   # Unit tests - Cross-platform, oldstable and stable
@@ -324,7 +348,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [build, test, test-minimum, lint, lint-targets, formatting, deps]
+    needs: [build, build-386, test, test-minimum, lint, lint-targets, formatting, deps]
     runs-on: ubuntu-latest
 
     steps:
