@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.12] - 2026-11-08
+
 ### Fixed
 - **Build failure next to gogpu v0.54.0** — g3d v0.1.11 did not compile in a module that also uses gogpu v0.54.0: Go's version selection picks wgpu v0.34.x there, whose `Draw`/`DrawIndexed` take a struct argument (`too many arguments in call to rp.Draw`). This release builds against wgpu v0.34.9 and works with current gogpu
 - **Alpha-masked materials on the software backend** — fragments of an `AlphaModeMask` material below the cutoff were not discarded on wgpu's software adapter: they wrote black and depth, hiding whatever was behind them. Fixed by the wgpu v0.34.7 update; a new test renders a masked box in front of an opaque one on the software backend and checks that the back box shows through
@@ -187,7 +189,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Example**
 - `examples/hello-cube/` — rotating lit cube demonstrating full g3d API
 
-[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.11...HEAD
+[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/gogpu/g3d/compare/v0.1.11...v0.1.12
 [0.1.11]: https://github.com/gogpu/g3d/compare/v0.1.10...v0.1.11
 [0.1.10]: https://github.com/gogpu/g3d/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/gogpu/g3d/compare/v0.1.8...v0.1.9
