@@ -2,13 +2,16 @@ name: CI
 
 # CI Strategy:
 # - Tests run on Linux, macOS, and Windows (cross-platform 3D library)
-# - Go 1.25+ required (matches go.mod requirement)
+# - Go: oldstable + stable in the test matrix, plus the go.mod minimum (1.25) in test-minimum
 # - Pure Go via goffi (requires CGO_ENABLED=0 for build/lint)
 # - Race detection uses the toolchain's -race, which needs CGO_ENABLED=1 on
 #   that step only; the plain tests keep CGO_ENABLED=0, the build users ship.
 # - Every action is pinned by commit SHA with a version comment. golangci-lint
 #   comes from the shared action, which caches the pinned archive: on 2026-11-08
 #   the per-job release download returned 504 for over an hour.
+# - No 386 leg: wgpu v0.34.9 does not compile for 32-bit (constant 4294967294
+#   overflows int in core/track) and goffi has no 386 syscall implementation
+#   (measured 2026-11-08: GOOS=linux GOARCH=386 go build ./... fails).
 #
 # Branch Strategy (GitHub Flow):
 # - main branch: Production-ready code
@@ -17,6 +20,9 @@ name: CI
 
 env:
   CGO_ENABLED: "0"
+  # Never download a newer Go behind our back: the job must run the Go it asked
+  # for, or the oldstable and minimum tests prove nothing.
+  GOTOOLCHAIN: local
 
 on:
   push:
@@ -35,9 +41,9 @@ jobs:
     name: Build - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.25']
 
     steps:
     - name: Checkout code
@@ -46,7 +52,7 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
       with:
-        go-version: ${{ matrix.go-version }}
+        go-version: stable
         cache: true
 
     - name: Download dependencies
@@ -58,14 +64,17 @@ jobs:
     - name: Build all packages
       run: go build ./...
 
-  # Unit tests - Cross-platform
+  # Unit tests - Cross-platform, oldstable and stable
   test:
-    name: Test - ${{ matrix.os }}
+    name: Test - ${{ matrix.os }} - Go ${{ matrix.go-version }}
     runs-on: ${{ matrix.os }}
     strategy:
+      # Each OS's -race result is separate evidence: with the default, one OS
+      # failing cancels the others and their results never show (gogpu/ui#247).
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
-        go-version: ['1.25']
+        go-version: [oldstable, stable]
 
     steps:
     - name: Checkout code
@@ -81,7 +90,7 @@ jobs:
       run: go mod download
 
     - name: Run go vet
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
       run: go vet ./...
 
     # The build users ship: CGO_ENABLED=0, so goffi runs its fakecgo path.
@@ -102,12 +111,12 @@ jobs:
       run: go test -race -count=1 ./...
 
     - name: Verify coverage file
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
       shell: bash
       run: ls -la coverage.txt && echo "$(wc -l < coverage.txt) lines"
 
     - name: Upload coverage to Codecov
-      if: matrix.os == 'ubuntu-latest'
+      if: matrix.os == 'ubuntu-latest' && matrix.go-version == 'stable'
       uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
@@ -115,6 +124,29 @@ jobs:
         flags: unittests
         name: codecov-g3d
         fail_ci_if_error: true
+
+  # The go.mod `go` line is a promise to every importer, and this machine never
+  # tests it (it builds with GOTOOLCHAIN >= go1.27.3). This job tests exactly
+  # that line.
+  test-minimum:
+    name: Test - ubuntu-latest - Go minimum
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+    - id: gomod
+      run: echo "go=$(awk '$1 == "go" { print $2; exit }' go.mod)" >> "$GITHUB_OUTPUT"
+
+    - name: Set up Go
+      uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      with:
+        go-version: ${{ steps.gomod.outputs.go }}
+        cache: true
+
+    - run: go version
+    - run: go test -count=1 ./...
 
   # Linting (Linux target)
   lint:
@@ -267,6 +299,22 @@ jobs:
         [ $WARNINGS -gt 0 ] && echo "::warning::$WARNINGS ecosystem dep(s) outdated"
         exit 0
 
+  # Informational: not in the gate, so a new CVE in a dependency does not block
+  # unrelated PRs. A red run is still treated as a task (fix or report). It
+  # stays on the latest govulncheck on purpose: the vulnerability data must be
+  # current. continue-on-error at job level: a finding with no fixed version
+  # yet (govulncheck exit 3) still shows this job red in every PR, but the run
+  # concludes success.
+  vulncheck:
+    name: Vulncheck
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+    - uses: golang/govulncheck-action@032d45514ae346b1db93c04b0c90b841c370344f # v1.1.0
+      with:
+        go-version-input: stable
+
   # The one check the main-protection ruleset requires once it switches to it.
   # Every job that must pass goes into needs, so adding a job or a matrix entry
   # never touches the ruleset. if: always() and the explicit result check are
@@ -276,7 +324,7 @@ jobs:
   required:
     name: Required checks
     if: always()
-    needs: [build, test, lint, lint-targets, formatting, deps]
+    needs: [build, test, test-minimum, lint, lint-targets, formatting, deps]
     runs-on: ubuntu-latest
 
     steps:
