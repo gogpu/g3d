@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **Examples build with the current releases again** — every example module moves to g3d v0.1.12, gogpu v0.54.1, gg v0.52.6 and ui v0.1.55 (as each needs them), so `go run` in `examples/*` works outside the workspace. This resolves the v0.1.12 known issue about the examples pinning previous releases.
+
 ## [0.1.12] - 2026-11-08
 
 ### Fixed
