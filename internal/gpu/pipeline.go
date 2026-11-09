@@ -108,6 +108,19 @@ func (c *PipelineCache) createPipeline(key PipelineKey) (*PipelineBundle, error)
 				Visibility: gputypes.ShaderStageFragment,
 				Buffer:     &gputypes.BufferBindingLayout{Type: gputypes.BufferBindingTypeUniform, MinBindingSize: materialUniformSize},
 			},
+			{
+				Binding:    2,
+				Visibility: gputypes.ShaderStageFragment,
+				Texture: &gputypes.TextureBindingLayout{
+					SampleType:    gputypes.TextureSampleTypeFloat,
+					ViewDimension: gputypes.TextureViewDimension2D,
+				},
+			},
+			{
+				Binding:    3,
+				Visibility: gputypes.ShaderStageFragment,
+				Sampler:    &gputypes.SamplerBindingLayout{Type: gputypes.SamplerBindingTypeFiltering},
+			},
 		},
 	})
 	if err != nil {
