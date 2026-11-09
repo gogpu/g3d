@@ -53,8 +53,8 @@ type Renderer struct {
 	objectUniformBufs   []*wgpu.Buffer // per-mesh model+normal matrix
 	materialUniformBufs []*wgpu.Buffer // per-mesh material properties
 
-	textures     map[string]*Texture
-	emptyTexture *Texture
+	textures     map[*Texture]*textureDescriptor
+	emptyTexture *textureDescriptor
 
 	objectBindGroups []*wgpu.BindGroup // per-mesh bind group (group 1)
 
@@ -86,7 +86,7 @@ func NewRenderer(provider gpucontext.DeviceProvider) (*Renderer, error) {
 		gpuState:    gpu.NewGPUState(),
 		renderList:  render.NewRenderList(),
 		depthFormat: gputypes.TextureFormatDepth24Plus,
-		textures:    make(map[string]*Texture),
+		textures:    make(map[*Texture]*textureDescriptor),
 	}
 
 	if err := r.gpuState.SetDeviceProvider(provider); err != nil {
@@ -114,7 +114,7 @@ func NewRendererFromDevice(
 		renderList:    render.NewRenderList(),
 		depthFormat:   gputypes.TextureFormatDepth24Plus,
 		surfaceFormat: surfaceFormat,
-		textures:      make(map[string]*Texture),
+		textures:      make(map[*Texture]*textureDescriptor),
 	}
 
 	if err := r.gpuState.SetDeviceDirect(device, queue); err != nil {
@@ -155,7 +155,7 @@ func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureV
 		return fmt.Errorf("g3d: create command encoder: %w", err)
 	}
 
-	if err := r.RenderTo(device, encoder, scene, camera, targetView); err != nil {
+	if err := r.RenderTo(encoder, scene, camera, targetView); err != nil {
 		encoder.DiscardEncoding()
 		return err
 	}
@@ -179,7 +179,6 @@ func (r *Renderer) Render(scene *Scene, camera Camera, targetView *wgpu.TextureV
 // must keep them valid through submission and must not use the encoder
 // concurrently.
 func (r *Renderer) RenderTo(
-	device *wgpu.Device,
 	encoder *wgpu.CommandEncoder,
 	scene *Scene,
 	camera Camera,
@@ -201,8 +200,16 @@ func (r *Renderer) RenderTo(
 		return err
 	}
 	if r.emptyTexture == nil {
-
-		tex, err := r.createTexture(device, []byte{0xff, 0xff, 0xff, 0xff}, DefaultTextureOptions(), 1, 1)
+		device := r.gpuState.Device()
+		tex, err := r.createTextureDescriptor(device, &Texture{
+			data:         []byte{0xff, 0xff, 0xff, 0xff},
+			width:        1,
+			height:       1,
+			magFilter:    gputypes.FilterModeLinear,
+			minFilter:    gputypes.FilterModeLinear,
+			addressModeU: gputypes.AddressModeClampToEdge,
+			addressModeV: gputypes.AddressModeClampToEdge,
+		})
 		if err != nil {
 			return fmt.Errorf("g3d: unable to create empty texture error: %w", err)
 		}
@@ -484,9 +491,9 @@ func (r *Renderer) recordDrawCall(
 		return fmt.Errorf("write material uniforms[%d]: %w", idx, err)
 	}
 
-	tex, err := r.textureById(mat.TextureID())
+	tex, err := r.getTextureDescriptor(device, mat.Texture())
 	if err != nil {
-		tex = r.emptyTexture
+		return fmt.Errorf("get texture descriptor: %w", err)
 	}
 
 	// Stale bind groups from the previous frame reference the same buffers with
@@ -761,12 +768,15 @@ func (r *Renderer) releasePersistentResources() {
 	}
 	r.materialUniformBufs = nil
 
+	// Release loaded textures.
 	if r.emptyTexture != nil {
 		r.emptyTexture.Release()
 		r.emptyTexture = nil
 	}
 
-	r.UnloadAllTextures()
+	for _, descriptor := range r.textures {
+		descriptor.Release()
+	}
 
 	// Release cached geometry buffers.
 	for _, buf := range r.geomVertBufs {

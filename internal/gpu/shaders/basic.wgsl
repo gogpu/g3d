@@ -4,9 +4,9 @@
 // Used by BasicMaterial (ShaderID = "basic").
 //
 // Bind groups:
-//   Group 0, Binding 0: FrameUniforms
-//   Group 1, Binding 0: ObjectUniforms
-//   Group 1, Binding 1: MaterialUniforms
+//   Group 0, Binding 0: FrameUniforms  (per-frame, set once)
+//   Group 1, Binding 0: ObjectUniforms (per-object)
+//   Group 1, Binding 1: MaterialUniforms (per-material, 16 bytes)
 //   Group 1, Binding 2: Base Color Texture
 //   Group 1, Binding 3: Base Color Sampler
 

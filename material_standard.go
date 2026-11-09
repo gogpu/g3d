@@ -26,7 +26,7 @@ type StandardMaterial struct {
 	alphaCutoff float32
 	doubleSided bool
 	wireframe   bool
-	textureID   string
+	texture     *Texture
 }
 
 // NewStandardMaterial creates a PBR material with the given options.
@@ -116,7 +116,7 @@ func (m *StandardMaterial) UniformData() []byte {
 	return buf[:]
 }
 
-// TextureID returns id of the texture.
-func (m *StandardMaterial) TextureID() string {
-	return m.textureID
+// Texture returns texture.
+func (m *StandardMaterial) Texture() *Texture {
+	return m.texture
 }

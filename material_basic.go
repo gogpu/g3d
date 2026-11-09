@@ -17,7 +17,7 @@ type BasicMaterial struct {
 	opacity     float32
 	doubleSided bool
 	wireframe   bool
-	textureID   string
+	texture     *Texture
 }
 
 // NewBasicMaterial creates an unlit material with the given options.
@@ -75,7 +75,7 @@ func (m *BasicMaterial) UniformData() []byte {
 	return buf[:]
 }
 
-// TextureID returns id of the texture.
-func (m *BasicMaterial) TextureID() string {
-	return m.textureID
+// Texture returns texture.
+func (m *BasicMaterial) Texture() *Texture {
+	return m.texture
 }

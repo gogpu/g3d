@@ -64,7 +64,6 @@ type Material interface {
 	// The byte layout must match the WGSL material uniform struct exactly.
 	UniformData() []byte
 
-	// TextureID returns string id of the registered texture.
-	// If texture with such id does not exist empty texture will be applied.
-	TextureID() string
+	// Texture returns texture.
+	Texture() *Texture
 }

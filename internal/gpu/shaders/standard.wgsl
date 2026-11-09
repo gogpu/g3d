@@ -1,4 +1,8 @@
-// standard.wgsl — Blinn-Phong lit shader for StandardMaterial with Texture Support.
+// standard.wgsl — Blinn-Phong lit shader for StandardMaterial.
+//
+// Phase 1: Blinn-Phong approximation (ambient + diffuse + specular).
+// Phase 2 will upgrade to Cook-Torrance BRDF.
+// Used by StandardMaterial (ShaderID = "standard").
 //
 // Bind groups:
 //   Group 0, Binding 0: FrameUniforms  (per-frame, set once)

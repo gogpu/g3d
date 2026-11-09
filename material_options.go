@@ -91,10 +91,10 @@ func (o alphaCutoffOption) applyStandard(m *StandardMaterial) { m.alphaCutoff = 
 // Only affects StandardMaterial; ignored by BasicMaterial.
 func WithAlphaCutoff(cutoff float32) MaterialOption { return alphaCutoffOption{cutoff} }
 
-type textureOption struct{ id string }
+type textureOption struct{ texture *Texture }
 
-func (t textureOption) applyBasic(m *BasicMaterial)       { m.textureID = t.id }
-func (t textureOption) applyStandard(m *StandardMaterial) { m.textureID = t.id }
+func (t textureOption) applyBasic(m *BasicMaterial)       { m.texture = t.texture }
+func (t textureOption) applyStandard(m *StandardMaterial) { m.texture = t.texture }
 
-// WithTexture sets texture id.
-func WithTexture(textureID string) MaterialOption { return textureOption{textureID} }
+// WithTexture sets texture.
+func WithTexture(texture *Texture) MaterialOption { return textureOption{texture} }

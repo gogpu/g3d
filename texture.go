@@ -3,13 +3,66 @@ package g3d
 import (
 	"fmt"
 	"image"
+	"image/draw"
 
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
 )
 
-// TODO: docs.
+// NewTexture creates new Texture with the given options.
+// Defaults: magFilter=gputypes.FilterModeLinear, minFilter=gputypes.FilterModeLinear,
+// addressModeU=gputypes.AddressModeClampToEdge, addressModeV=gputypes.AddressModeClampToEdge.
+func NewTexture(img image.Image, options ...TextureOption) *Texture {
+	var (
+		bounds = img.Bounds()
+		rgba   *image.NRGBA
+		ok     bool
+	)
+	if rgba, ok = img.(*image.NRGBA); !ok {
+		rgba = image.NewNRGBA(bounds)
+		draw.Draw(rgba, bounds, img, bounds.Min, draw.Src)
+	}
+
+	tex := &Texture{
+		data:         rgba.Pix,
+		width:        bounds.Dy(),
+		height:       bounds.Dx(),
+		magFilter:    gputypes.FilterModeLinear,
+		minFilter:    gputypes.FilterModeLinear,
+		addressModeU: gputypes.AddressModeClampToEdge,
+		addressModeV: gputypes.AddressModeClampToEdge,
+	}
+
+	for _, opt := range options {
+		opt.apply(tex)
+	}
+
+	return tex
+}
+
+// Texture represents texture that can be passed as parameter for a material.
 type Texture struct {
+	data          []byte
+	width, height int
+
+	magFilter    gputypes.FilterMode
+	minFilter    gputypes.FilterMode
+	addressModeU gputypes.AddressMode
+	addressModeV gputypes.AddressMode
+}
+
+// Dimensions returns dimensions of the texture.
+func (t *Texture) Dimensions() (width, height int) {
+	return t.width, t.height
+}
+
+// AddressMode returns address mode of the texture.
+func (t *Texture) AddressMode() (u, v gputypes.AddressMode) {
+	return t.addressModeU, t.addressModeV
+}
+
+// textureDescriptor holds information used by gpu to display texture.
+type textureDescriptor struct {
 	texture *wgpu.Texture
 	view    *wgpu.TextureView
 	sampler *wgpu.Sampler
@@ -18,51 +71,51 @@ type Texture struct {
 	format  gputypes.TextureFormat
 }
 
-func (t *Texture) Release() {
+// Release ...
+func (t *textureDescriptor) Release() {
 	t.texture.Release()
 	t.view.Release()
 	t.sampler.Release()
 }
 
-// TextureOptions configures texture creation.
-type TextureOptions struct {
-	// Label for debugging (optional)
-	Label string
-
-	// Filter mode for magnification (default: Linear)
-	MagFilter gputypes.FilterMode
-
-	// Filter mode for minification (default: Linear)
-	MinFilter gputypes.FilterMode
-
-	// Address mode for U coordinate (default: ClampToEdge)
-	AddressModeU gputypes.AddressMode
-
-	// Address mode for V coordinate (default: ClampToEdge)
-	AddressModeV gputypes.AddressMode
-}
-
-// DefaultTextureOptions returns sensible defaults for texture creation.
-func DefaultTextureOptions() TextureOptions {
-	return TextureOptions{
-		MagFilter:    gputypes.FilterModeLinear,
-		MinFilter:    gputypes.FilterModeLinear,
-		AddressModeU: gputypes.AddressModeClampToEdge,
-		AddressModeV: gputypes.AddressModeClampToEdge,
+// getTextureDescriptor returns existing texture descriptor or creates new.
+func (r *Renderer) getTextureDescriptor(device *wgpu.Device, texture *Texture) (*textureDescriptor, error) {
+	if texture == nil {
+		return r.emptyTexture, nil
 	}
+
+	var (
+		descriptor *textureDescriptor
+		err        error
+		ok         bool
+	)
+
+	descriptor, ok = r.textures[texture]
+	if !ok {
+		descriptor, err = r.createTextureDescriptor(device, texture)
+		if err != nil {
+			return nil, err
+		}
+		r.textures[texture] = descriptor
+	}
+	return descriptor, err
 }
 
-func (r *Renderer) createTexture(device *wgpu.Device, data []byte, opts TextureOptions, width, height int) (*Texture, error) {
-	expectedSize := width * height * 4
-	if len(data) != expectedSize {
-		return nil, fmt.Errorf("g3d: invalid data size: expected %d bytes, got %d", expectedSize, len(data))
+// createTextureDescriptor creates new texture descriptor.
+func (r *Renderer) createTextureDescriptor(device *wgpu.Device, tex *Texture) (*textureDescriptor, error) {
+	if len(tex.data) == 0 {
+		return nil, fmt.Errorf("g3d: invalid data size: expected at least %d bytes, got %d", 4, len(tex.data))
+	}
+
+	expectedSize := tex.width * tex.height * 4
+	if len(tex.data) != expectedSize {
+		return nil, fmt.Errorf("g3d: invalid data size: expected %d bytes, got %d", expectedSize, len(tex.data))
 	}
 
 	texture, err := device.CreateTexture(&wgpu.TextureDescriptor{
-		Label: opts.Label,
 		Size: wgpu.Extent3D{
-			Width:              uint32(width),  //nolint:gosec // G115: width validated positive above
-			Height:             uint32(height), //nolint:gosec // G115: height validated positive above
+			Width:              uint32(tex.width),  //nolint:gosec // G115: width validated positive above
+			Height:             uint32(tex.height), //nolint:gosec // G115: height validated positive above
 			DepthOrArrayLayers: 1,
 		},
 		MipLevelCount: 1,
@@ -84,15 +137,15 @@ func (r *Renderer) createTexture(device *wgpu.Device, data []byte, opts TextureO
 			Origin:   wgpu.Origin3D{X: 0, Y: 0, Z: 0},
 			Aspect:   gputypes.TextureAspectAll,
 		},
-		data,
+		tex.data,
 		&wgpu.ImageDataLayout{
 			Offset:       0,
-			BytesPerRow:  uint32(width * 4), //nolint:gosec // G115: width validated positive above
-			RowsPerImage: uint32(height),    //nolint:gosec // G115: height validated positive above
+			BytesPerRow:  uint32(tex.width * 4), //nolint:gosec // G115: width validated positive above
+			RowsPerImage: uint32(tex.height),    //nolint:gosec // G115: height validated positive above
 		},
 		&wgpu.Extent3D{
-			Width:              uint32(width),  //nolint:gosec // G115: width validated positive above
-			Height:             uint32(height), //nolint:gosec // G115: height validated positive above
+			Width:              uint32(tex.width),  //nolint:gosec // G115: width validated positive above
+			Height:             uint32(tex.height), //nolint:gosec // G115: height validated positive above
 			DepthOrArrayLayers: 1,
 		},
 	); err != nil {
@@ -109,12 +162,11 @@ func (r *Renderer) createTexture(device *wgpu.Device, data []byte, opts TextureO
 
 	// Create sampler
 	sampler, err := device.CreateSampler(&wgpu.SamplerDescriptor{
-		Label:        opts.Label,
-		AddressModeU: opts.AddressModeU,
-		AddressModeV: opts.AddressModeV,
+		AddressModeU: tex.addressModeU,
+		AddressModeV: tex.addressModeV,
 		AddressModeW: gputypes.AddressModeClampToEdge,
-		MagFilter:    opts.MagFilter,
-		MinFilter:    opts.MinFilter,
+		MagFilter:    tex.magFilter,
+		MinFilter:    tex.minFilter,
 		MipmapFilter: gputypes.FilterModeNearest,
 		LodMinClamp:  0,
 		LodMaxClamp:  32,
@@ -125,63 +177,12 @@ func (r *Renderer) createTexture(device *wgpu.Device, data []byte, opts TextureO
 		return nil, fmt.Errorf("g3d: failed to create sampler: %w", err)
 	}
 
-	return &Texture{
+	return &textureDescriptor{
 		texture: texture,
 		view:    view,
 		sampler: sampler,
-		width:   width,
-		height:  height,
-		format:  gputypes.TextureFormatRGBA8Unorm,
+		width:   tex.width,
+		height:  tex.height,
+		format:  gputypes.TextureFormatRGBA8UnormSrgb,
 	}, nil
-}
-
-// AddTextureAsImage adds texture as image.
-func (r *Renderer) AddTextureAsImage(device *wgpu.Device, img *image.RGBA, id string, smooth bool) error {
-	if _, has := r.textures[id]; has {
-		return fmt.Errorf("texture with id: %s is already loaded", id)
-	}
-
-	bounds := img.Bounds()
-	width := bounds.Dx()
-	height := bounds.Dy()
-
-	opts := DefaultTextureOptions()
-	if !smooth {
-		opts.MagFilter = gputypes.FilterModeNearest
-		opts.MinFilter = gputypes.FilterModeNearest
-	}
-
-	texture, err := r.createTexture(device, img.Pix, opts, width, height)
-	if err != nil {
-		return err
-	}
-
-	r.textures[id] = texture
-
-	return nil
-}
-
-// UnloadTexture unloads the texture by its id.
-func (r *Renderer) UnloadTexture(id string) {
-	texture, ok := r.textures[id]
-	if ok {
-		texture.Release()
-	}
-	delete(r.textures, id)
-}
-
-// UnloadAllTextures unloads all textures.
-func (r *Renderer) UnloadAllTextures() {
-	for _, tex := range r.textures {
-		tex.Release()
-	}
-	r.textures = make(map[string]*Texture)
-}
-
-func (r *Renderer) textureById(id string) (*Texture, error) {
-	texture, ok := r.textures[id]
-	if !ok {
-		return nil, fmt.Errorf("texture with id: %s does not exist", id)
-	}
-	return texture, nil
 }
