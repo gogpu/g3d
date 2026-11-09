@@ -77,8 +77,10 @@ type Renderer struct {
 }
 
 // NewRenderer creates a Renderer using a shared GPU device from a DeviceProvider
-// (e.g., gogpu.App). Returns an error if the provider has a software adapter
-// or the device type is incompatible.
+// (e.g., gogpu.App). Any adapter type is accepted, including CPU adapters
+// (wgpu's software backend, lavapipe, llvmpipe); the application decides
+// whether to require a hardware adapter. Returns an error if the provider's
+// device or queue is nil.
 func NewRenderer(provider gpucontext.DeviceProvider) (*Renderer, error) {
 	r := &Renderer{
 		gpuState:    gpu.NewGPUState(),
@@ -330,6 +332,14 @@ func (r *Renderer) recordFrame(
 	}
 
 	bg := scene.Background
+	stencilLoadOp := gputypes.LoadOpUndefined
+	stencilStoreOp := gputypes.StoreOpUndefined
+	stencilReadOnly := true
+	if r.depthFormat.HasDepth() && r.depthFormat.HasStencil() {
+		stencilLoadOp = gputypes.LoadOpClear
+		stencilStoreOp = gputypes.StoreOpDiscard
+		stencilReadOnly = false
+	}
 	renderPass, err := encoder.BeginRenderPass(&wgpu.RenderPassDescriptor{
 		Label: "g3d_forward",
 		ColorAttachments: []wgpu.RenderPassColorAttachment{
@@ -345,8 +355,9 @@ func (r *Renderer) recordFrame(
 			DepthLoadOp:     gputypes.LoadOpClear,
 			DepthStoreOp:    gputypes.StoreOpStore,
 			DepthClearValue: 1.0,
-			StencilLoadOp:   gputypes.LoadOpClear,
-			StencilStoreOp:  gputypes.StoreOpDiscard,
+			StencilLoadOp:   stencilLoadOp,
+			StencilStoreOp:  stencilStoreOp,
+			StencilReadOnly: stencilReadOnly,
 		},
 	})
 	if err != nil {
@@ -519,7 +530,7 @@ func (r *Renderer) recordDrawCall(
 			return fmt.Errorf("invalid vertex count %d", vertexCount)
 		}
 		rp.SetVertexBuffer(0, vertBuf, 0)
-		rp.Draw(uint32(vertexCount), 1, 0, 0)
+		rp.Draw(gputypes.DrawArgs{VertexCount: uint32(vertexCount), InstanceCount: 1})
 		return nil
 	}
 
@@ -530,7 +541,7 @@ func (r *Renderer) recordDrawCall(
 
 	rp.SetVertexBuffer(0, vertBuf, 0)
 	rp.SetIndexBuffer(idxBuf, gputypes.IndexFormatUint32, 0)
-	rp.DrawIndexed(idxCount, 1, 0, 0, 0)
+	rp.DrawIndexed(gputypes.DrawIndexedArgs{IndexCount: idxCount, InstanceCount: 1})
 
 	return nil
 }
@@ -795,11 +806,14 @@ func createVertexBuffer(device *wgpu.Device, geom Geometry) (*wgpu.Buffer, error
 		return nil, err
 	}
 
-	dst := mapped.Bytes()
+	dst := mapped.BytesMut()
 	for i, v := range verts {
 		binary.LittleEndian.PutUint32(dst[i*4:(i+1)*4], math.Float32bits(v))
 	}
-
+	if err := mapped.Flush(); err != nil {
+		buf.Release()
+		return nil, err
+	}
 	if err := buf.Unmap(); err != nil {
 		buf.Release()
 		return nil, err
@@ -834,11 +848,14 @@ func createIndexBuffer(device *wgpu.Device, geom Geometry) (*wgpu.Buffer, uint32
 		return nil, 0, err
 	}
 
-	dst := mapped.Bytes()
+	dst := mapped.BytesMut()
 	for i, idx := range indices {
 		binary.LittleEndian.PutUint32(dst[i*4:(i+1)*4], idx)
 	}
-
+	if err := mapped.Flush(); err != nil {
+		buf.Release()
+		return nil, 0, err
+	}
 	if err := buf.Unmap(); err != nil {
 		buf.Release()
 		return nil, 0, err

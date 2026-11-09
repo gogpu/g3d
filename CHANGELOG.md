@@ -7,6 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- **deps:** wgpu v0.34.9 → v0.34.12, gpucontext v0.31.3 → v0.32.0, indirect naga v0.21.4 → v0.21.9. wgpu v0.34.11 compiles for 32-bit again, so CI gains a `linux/386` build leg; it is build-only because goffi v0.6.8 has no 386 syscall implementation, which g3d's tests reach through wgpu's software backend
+- **Examples build with the current releases again** — every example module moves to g3d v0.1.12, gogpu v0.54.1, gg v0.52.6 and ui v0.1.55 (as each needs them), so `go run` in `examples/*` works outside the workspace. This resolves the v0.1.12 known issue about the examples pinning previous releases.
+
+## [0.1.12] - 2026-11-08
+
+### Fixed
+- **Build failure next to gogpu v0.54.0** — g3d v0.1.11 did not compile in a module that also uses gogpu v0.54.0: Go's version selection picks wgpu v0.34.x there, whose `Draw`/`DrawIndexed` take a struct argument (`too many arguments in call to rp.Draw`). This release builds against wgpu v0.34.9 and works with current gogpu
+- **Alpha-masked materials on the software backend** — fragments of an `AlphaModeMask` material below the cutoff were not discarded on wgpu's software adapter: they wrote black and depth, hiding whatever was behind them. Fixed by the wgpu v0.34.7 update; a new test renders a masked box in front of an opaque one on the software backend and checks that the back box shows through
+
+### Changed
+- **deps:** wgpu v0.33.0 → v0.34.9, gpucontext v0.31.2 → v0.31.3, gputypes v0.7.0 → v0.8.2; indirect naga v0.19.0 → v0.21.4, goffi v0.6.3 → v0.6.8. naga v0.21.3 fixes [GHSA-887q-cf99-367r](https://github.com/gogpu/naga/security/advisories/GHSA-887q-cf99-367r) (stack overflow in the WGSL parser); g3d only compiles its own built-in shaders, so it was not reachable through g3d, and the update keeps vulnerability scanners clean
+- **wgpu v0.34 struct-param draw API** — `Draw`/`DrawIndexed` calls now pass `gputypes.DrawArgs` / `gputypes.DrawIndexedArgs` (wgpu ADR-072); no change to g3d's public API
+- **.gitignore** aligned with the ecosystem standard: private `.pm/`, `*.wasm`, `*.prof`, `coverage.*`, `.env.*`, and root-level example binaries
+
+### Known issues
+- **Examples still pin the previous releases.** The example modules under `examples/` keep g3d v0.1.11 and the gogpu, gg and ui versions they were built with, because the current gg and ui releases do not build on wgpu v0.34 yet. They move to this release once gg and ui ship versions that do. Your own module is not affected: depend on g3d v0.1.12 with gogpu v0.54.0 or later
+
+## [0.1.11] - 2026-10-30
+
+### Fixed
+- **Sphere rendered inside-out** — `NewSphereGeometry` generated a mirrored sphere (missing negative x versus three.js `SphereGeometry`), so its triangles were clockwise seen from outside: back-face culling removed the outer surface and the inside of the far hemisphere showed through, with wrong lighting; `WithDoubleSided(true)` showed the artifacts reported in [#46](https://github.com/gogpu/g3d/issues/46). The sphere now matches three.js: counter-clockwise front faces and `u` running left to right on the outer surface (reported by [@maugre](https://github.com/maugre))
+- **CPU adapters refused** — `NewRenderer` rejected any adapter of type CPU, which blocked Vulkan drivers that run on the CPU (lavapipe, llvmpipe) and wgpu's own software backend, g3d's intended fallback for CI and headless use. g3d now renders on whatever device it is given; requiring a hardware adapter is the application's choice when it creates the device, as in Rust wgpu and Bevy ([#47](https://github.com/gogpu/g3d/issues/47), reported by [@maugre](https://github.com/maugre)). This change was planned for the upcoming backend-registration update and ships early because it blocks users today. A new test renders a sphere on the software backend and checks the pixels
+- **Plane texture coordinates flipped** — `NewPlaneGeometry` used a bottom-up `v`, unlike the box and sphere; it now uses the WebGPU/glTF convention (`v = 0` at the image's top row), so a texture seen from above is not mirrored. **Behaviour change:** code that flipped `v` to compensate for the old plane UVs must drop that flip
+
+## [0.1.10] - 2026-08-30
+
+### Fixed
+- **Stencil operations for depth-only formats** — configure `StencilLoadOp`/`StencilStoreOp` based on depth format: `Undefined` + `StencilReadOnly: true` for `Depth24Plus` (no stencil aspect), normal stencil ops for `Depth24PlusStencil8` and `Depth32FloatStencil8`. Fixes WebGPU browser validation rejection ([#38](https://github.com/gogpu/g3d/pull/38), contributed by [@tarmo888](https://github.com/tarmo888))
+- **Writable mapped-range API** — migrated `createVertexBuffer`/`createIndexBuffer` from `Bytes()` to `BytesMut()` + `Flush()` for cross-backend compatibility (browser backend requires explicit flush) ([#38](https://github.com/gogpu/g3d/pull/38), contributed by [@tarmo888](https://github.com/tarmo888))
+
+### Changed
+- **deps:** wgpu v0.31.4 → v0.33.0, gpucontext v0.28.0 → v0.31.2, gputypes v0.5.2 → v0.7.0, naga v0.18.0 → v0.19.0
+- **deps:** removed stale `gogpu` direct dependency (g3d only depends down: wgpu, gpucontext, gputypes)
+
 ## [0.1.9] - 2026-08-14
 
 ### Added
@@ -158,7 +193,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **Example**
 - `examples/hello-cube/` — rotating lit cube demonstrating full g3d API
 
-[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.9...HEAD
+[Unreleased]: https://github.com/gogpu/g3d/compare/v0.1.12...HEAD
+[0.1.12]: https://github.com/gogpu/g3d/compare/v0.1.11...v0.1.12
+[0.1.11]: https://github.com/gogpu/g3d/compare/v0.1.10...v0.1.11
+[0.1.10]: https://github.com/gogpu/g3d/compare/v0.1.9...v0.1.10
 [0.1.9]: https://github.com/gogpu/g3d/compare/v0.1.8...v0.1.9
 [0.1.8]: https://github.com/gogpu/g3d/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/gogpu/g3d/compare/v0.1.6...v0.1.7

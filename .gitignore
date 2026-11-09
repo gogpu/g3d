@@ -1,54 +1,61 @@
-# Binaries
+# Private — never committed (never `git add -f` these)
+.claude/
+.pm/
+.reference.md
+docs/dev/
+tmp/
+reference/
+
+# AI/IDE tooling state
+.gode/
+.goda/
+.goco/
+.mcp.json
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build and test artifacts
 *.exe
 *.exe~
 *.dll
 *.so
 *.dylib
-
-# Test binary
+*.wasm
 *.test
-
-# Output files
-*.out
+/*.out
+*.prof
+coverage.*
 *.log
-coverage.txt
-
-# Go workspace
-go.work
-go.work.sum
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Build output
-bin/
-dist/
-
-# Debug
+*.bak
+*.orig
+/bin/
+/dist/
+/build/
 __debug_bin*
 
-# Local config
-.env
-.env.local
+# Example binaries built from the repo root without -o (cross-builds have no extension).
+# Prefer `go build -o dist/<name> ./examples/<name>`.
+/hello-cube
+/gopher
+/viewport3d
+/fullscreen-overlay
 
 # Benchmark results (generated)
 benchmark_results*.txt
 BENCHMARK_RESULTS*.md
 
-# AI settings (private)
-.claude/
-.goco/
-.gode/
+# Go workspace (local overrides only)
+go.work
+go.work.sum
 
-# Private developer docs
-docs/dev/
+# Environment and secrets
+.env
+.env.*
+!.env.example
 
-tmp/
+# OS files
+.DS_Store
+Thumbs.db
