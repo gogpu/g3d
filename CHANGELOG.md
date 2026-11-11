@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Changed
-- **deps:** wgpu v0.34.9 → v0.34.12, gpucontext v0.31.3 → v0.32.0, indirect naga v0.21.4 → v0.21.9. wgpu v0.34.11 compiles for 32-bit again, so CI gains a `linux/386` build leg; it is build-only because goffi v0.6.8 has no 386 syscall implementation, which g3d's tests reach through wgpu's software backend
+- **deps:** wgpu v0.34.9 → v0.34.13, gpucontext v0.31.3 → v0.32.0, indirect naga v0.21.4 → v0.21.10. wgpu v0.34.11 compiles for 32-bit again, so CI gains a `linux/386` build leg; it is build-only because goffi v0.6.8 has no 386 syscall implementation, which g3d's tests reach through wgpu's software backend. wgpu v0.34.13 changes no wgpu code; it carries naga v0.21.10 with Metal/MSL shader fixes, and g3d's two WGSL shaders compile to the same output as before on every target (SPIR-V, MSL, HLSL, GLSL 330/ES300 per entry point, DXIL)
 - **Examples build with the current releases again** — every example module moves to g3d v0.1.12, gogpu v0.54.1, gg v0.52.6 and ui v0.1.55 (as each needs them), so `go run` in `examples/*` works outside the workspace. This resolves the v0.1.12 known issue about the examples pinning previous releases.
 
 ## [0.1.12] - 2026-11-08
