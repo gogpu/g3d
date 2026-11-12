@@ -10,8 +10,7 @@ import (
 
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
-	"github.com/gogpu/wgpu/hal"
-	"github.com/gogpu/wgpu/hal/noop"
+	"github.com/gogpu/wgpu/wgputest"
 )
 
 type testGeometry struct {
@@ -28,117 +27,20 @@ func (g *testGeometry) VertexCount() int { return g.vertexCount }
 
 func (g *testGeometry) BoundingBox() AABB { return computeAABB(g.vertices) }
 
-type geometryDrawCall struct {
-	vertexCount   uint32
-	instanceCount uint32
-	firstVertex   uint32
-	firstInstance uint32
-}
-
-type geometryIndexedDrawCall struct {
-	indexCount    uint32
-	instanceCount uint32
-	firstIndex    uint32
-	baseVertex    int32
-	firstInstance uint32
-}
-
-type geometryDrawRecorder struct {
-	vertexBufferBindings int
-	indexBufferBindings  int
-	vertexBufferCreates  int
-	indexBufferCreates   int
-	draws                []geometryDrawCall
-	indexedDraws         []geometryIndexedDrawCall
-}
-
-type geometryRecordingDevice struct {
-	noop.Device
-	recorder *geometryDrawRecorder
-}
-
-func (d *geometryRecordingDevice) CreateBuffer(desc *hal.BufferDescriptor) (hal.Buffer, error) {
-	switch desc.Label {
-	case "g3d_vertex":
-		d.recorder.vertexBufferCreates++
-	case "g3d_index":
-		d.recorder.indexBufferCreates++
-	}
-	return d.Device.CreateBuffer(desc)
-}
-
-func (d *geometryRecordingDevice) CreateCommandEncoder(
-	_ *hal.CommandEncoderDescriptor,
-) (hal.CommandEncoder, error) {
-	return &geometryRecordingCommandEncoder{recorder: d.recorder}, nil
-}
-
-type geometryRecordingCommandEncoder struct {
-	noop.CommandEncoder
-	recorder *geometryDrawRecorder
-}
-
-func (e *geometryRecordingCommandEncoder) BeginRenderPass(
-	_ *hal.RenderPassDescriptor,
-) hal.RenderPassEncoder {
-	return &geometryRecordingRenderPass{recorder: e.recorder}
-}
-
-type geometryRecordingRenderPass struct {
-	noop.RenderPassEncoder
-	recorder *geometryDrawRecorder
-}
-
-func (p *geometryRecordingRenderPass) SetVertexBuffer(_ uint32, _ hal.Buffer, _ uint64) {
-	p.recorder.vertexBufferBindings++
-}
-
-func (p *geometryRecordingRenderPass) SetIndexBuffer(
-	_ hal.Buffer,
-	_ gputypes.IndexFormat,
-	_ uint64,
-) {
-	p.recorder.indexBufferBindings++
-}
-
-func (p *geometryRecordingRenderPass) Draw(args gputypes.DrawArgs) {
-	p.recorder.draws = append(p.recorder.draws, geometryDrawCall{
-		vertexCount:   args.VertexCount,
-		instanceCount: args.InstanceCount,
-		firstVertex:   args.FirstVertex,
-		firstInstance: args.FirstInstance,
-	})
-}
-
-func (p *geometryRecordingRenderPass) DrawIndexed(args gputypes.DrawIndexedArgs) {
-	p.recorder.indexedDraws = append(p.recorder.indexedDraws, geometryIndexedDrawCall{
-		indexCount:    args.IndexCount,
-		instanceCount: args.InstanceCount,
-		firstIndex:    args.FirstIndex,
-		baseVertex:    args.BaseVertex,
-		firstInstance: args.FirstInstance,
-	})
-}
-
 func newGeometryDrawFixture(
 	t *testing.T,
-) (*Renderer, *wgpu.TextureView, *geometryDrawRecorder) {
+) (*Renderer, *wgpu.TextureView, *wgputest.Recorder) {
 	t.Helper()
 
-	recorder := &geometryDrawRecorder{}
-	rawDevice := &geometryRecordingDevice{recorder: recorder}
-	device, err := wgpu.NewDeviceFromHAL(
-		rawDevice, &noop.Queue{}, 0, wgpu.DefaultLimits(), "g3d-geometry-draw-test",
-	)
+	recorder := wgputest.NewRecorder()
+	device, queue, cleanup, err := wgputest.NewNoopDevice(wgputest.WithRecorder(recorder))
 	if err != nil {
-		t.Fatalf("NewDeviceFromHAL: %v", err)
+		t.Fatalf("wgputest.NewNoopDevice: %v", err)
 	}
 
-	renderer, err := NewRendererFromDevice(
-		device, device.Queue(), gputypes.TextureFormatBGRA8Unorm,
-	)
+	renderer, err := NewRendererFromDevice(device, queue, gputypes.TextureFormatBGRA8Unorm)
 	if err != nil {
-		device.Release()
+		cleanup()
 		t.Fatalf("NewRendererFromDevice: %v", err)
 	}
 	renderer.SetSize(16, 16)
@@ -154,14 +56,14 @@ func newGeometryDrawFixture(
 	})
 	if err != nil {
 		renderer.Release()
-		device.Release()
+		cleanup()
 		t.Fatalf("CreateTexture: %v", err)
 	}
 	view, err := device.CreateTextureView(texture, nil)
 	if err != nil {
 		texture.Release()
 		renderer.Release()
-		device.Release()
+		cleanup()
 		t.Fatalf("CreateTextureView: %v", err)
 	}
 
@@ -169,9 +71,20 @@ func newGeometryDrawFixture(
 		view.Release()
 		texture.Release()
 		renderer.Release()
-		device.Release()
+		cleanup()
 	})
 	return renderer, view, recorder
+}
+
+// bufferCreates counts the public buffer creations that carry the given label.
+func bufferCreates(trace *wgputest.Trace, label string) int {
+	n := 0
+	for _, b := range trace.Buffers {
+		if b.Label == label {
+			n++
+		}
+	}
+	return n
 }
 
 func TestRendererDrawsNonIndexedGeometry(t *testing.T) {
@@ -203,26 +116,30 @@ func TestRendererDrawsNonIndexedGeometry(t *testing.T) {
 				t.Fatalf("second Render: %v", err)
 			}
 
-			wantDraw := geometryDrawCall{
-				vertexCount: 3, instanceCount: 1, firstVertex: 0, firstInstance: 0,
+			trace := recorder.Trace()
+			if len(trace.Draws) != 2 {
+				t.Fatalf("non-indexed draws = %+v, want two", trace.Draws)
 			}
-			if len(recorder.draws) != 2 || recorder.draws[0] != wantDraw || recorder.draws[1] != wantDraw {
-				t.Fatalf("non-indexed draws = %+v, want two %+v calls", recorder.draws, wantDraw)
+			for i, draw := range trace.Draws {
+				if draw.VertexCount != 3 || draw.InstanceCount != 1 ||
+					draw.FirstVertex != 0 || draw.FirstInstance != 0 {
+					t.Fatalf("draw %d = %+v, want vertexCount 3, instanceCount 1, firstVertex/firstInstance 0", i, draw)
+				}
 			}
-			if len(recorder.indexedDraws) != 0 {
-				t.Fatalf("indexed draws = %+v, want none", recorder.indexedDraws)
+			if len(trace.DrawsIndexed) != 0 {
+				t.Fatalf("indexed draws = %+v, want none", trace.DrawsIndexed)
 			}
-			if recorder.vertexBufferBindings != 2 {
-				t.Errorf("vertex buffer bindings = %d, want 2", recorder.vertexBufferBindings)
+			if got := len(trace.VertexBuffers); got != 2 {
+				t.Errorf("vertex buffer binds = %d, want 2", got)
 			}
-			if recorder.indexBufferBindings != 0 {
-				t.Errorf("index buffer bindings = %d, want 0", recorder.indexBufferBindings)
+			if got := len(trace.IndexBuffers); got != 0 {
+				t.Errorf("index buffer binds = %d, want 0", got)
 			}
-			if recorder.vertexBufferCreates != 1 {
-				t.Errorf("vertex buffer creations = %d, want 1", recorder.vertexBufferCreates)
+			if got := bufferCreates(&trace, "g3d_vertex"); got != 1 {
+				t.Errorf("vertex buffer creations = %d, want 1", got)
 			}
-			if recorder.indexBufferCreates != 0 {
-				t.Errorf("index buffer creations = %d, want 0", recorder.indexBufferCreates)
+			if got := bufferCreates(&trace, "g3d_index"); got != 0 {
+				t.Errorf("index buffer creations = %d, want 0", got)
 			}
 			if len(renderer.geomIdxBufs) != 0 || len(renderer.geomIdxCounts) != 0 {
 				t.Errorf("index caches populated for non-indexed geometry")
@@ -242,17 +159,17 @@ func TestRendererRejectsNonIndexedGeometryWithoutVertices(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "geometry has no vertices") {
 		t.Fatalf("Render error = %v, want geometry has no vertices", err)
 	}
-	if len(recorder.draws) != 0 || len(recorder.indexedDraws) != 0 {
+	trace := recorder.Trace()
+	if len(trace.Draws) != 0 || len(trace.DrawsIndexed) != 0 {
 		t.Fatalf("draws recorded for empty geometry: non-indexed=%+v indexed=%+v",
-			recorder.draws, recorder.indexedDraws)
+			trace.Draws, trace.DrawsIndexed)
 	}
-	if recorder.vertexBufferBindings != 0 || recorder.indexBufferBindings != 0 {
+	if len(trace.VertexBuffers) != 0 || len(trace.IndexBuffers) != 0 {
 		t.Fatalf("buffers bound for empty geometry: vertex=%d index=%d",
-			recorder.vertexBufferBindings, recorder.indexBufferBindings)
+			len(trace.VertexBuffers), len(trace.IndexBuffers))
 	}
-	if recorder.vertexBufferCreates != 0 || recorder.indexBufferCreates != 0 {
-		t.Fatalf("buffers created for empty geometry: vertex=%d index=%d",
-			recorder.vertexBufferCreates, recorder.indexBufferCreates)
+	if v, i := bufferCreates(&trace, "g3d_vertex"), bufferCreates(&trace, "g3d_index"); v != 0 || i != 0 {
+		t.Fatalf("buffers created for empty geometry: vertex=%d index=%d", v, i)
 	}
 }
 
@@ -289,17 +206,17 @@ func TestRendererRejectsInvalidNonIndexedVertexCount(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "invalid vertex count") {
 				t.Fatalf("Render error = %v, want invalid vertex count", err)
 			}
-			if len(recorder.draws) != 0 || len(recorder.indexedDraws) != 0 {
+			trace := recorder.Trace()
+			if len(trace.Draws) != 0 || len(trace.DrawsIndexed) != 0 {
 				t.Fatalf("draws recorded for invalid count: non-indexed=%+v indexed=%+v",
-					recorder.draws, recorder.indexedDraws)
+					trace.Draws, trace.DrawsIndexed)
 			}
-			if recorder.vertexBufferBindings != 0 || recorder.indexBufferBindings != 0 {
+			if len(trace.VertexBuffers) != 0 || len(trace.IndexBuffers) != 0 {
 				t.Fatalf("buffers bound for invalid count: vertex=%d index=%d",
-					recorder.vertexBufferBindings, recorder.indexBufferBindings)
+					len(trace.VertexBuffers), len(trace.IndexBuffers))
 			}
-			if recorder.vertexBufferCreates != 1 || recorder.indexBufferCreates != 0 {
-				t.Fatalf("buffer creations = vertex %d, index %d; want 1, 0",
-					recorder.vertexBufferCreates, recorder.indexBufferCreates)
+			if v, i := bufferCreates(&trace, "g3d_vertex"), bufferCreates(&trace, "g3d_index"); v != 1 || i != 0 {
+				t.Fatalf("buffer creations = vertex %d, index %d; want 1, 0", v, i)
 			}
 		})
 	}
@@ -325,22 +242,26 @@ func TestRendererPreservesIndexedGeometryDraw(t *testing.T) {
 		t.Fatalf("second Render: %v", err)
 	}
 
-	wantDraw := geometryIndexedDrawCall{
-		indexCount: 3, instanceCount: 1, firstIndex: 0, baseVertex: 0, firstInstance: 0,
+	trace := recorder.Trace()
+	if len(trace.DrawsIndexed) != 2 {
+		t.Fatalf("indexed draws = %+v, want two", trace.DrawsIndexed)
 	}
-	if len(recorder.indexedDraws) != 2 || recorder.indexedDraws[0] != wantDraw || recorder.indexedDraws[1] != wantDraw {
-		t.Fatalf("indexed draws = %+v, want two %+v calls", recorder.indexedDraws, wantDraw)
+	for i, draw := range trace.DrawsIndexed {
+		if draw.IndexCount != 3 || draw.InstanceCount != 1 ||
+			draw.FirstIndex != 0 || draw.BaseVertex != 0 || draw.FirstInstance != 0 {
+			t.Fatalf("indexed draw %d = %+v, want indexCount 3, instanceCount 1, firstIndex/baseVertex/firstInstance 0",
+				i, draw)
+		}
 	}
-	if len(recorder.draws) != 0 {
-		t.Fatalf("non-indexed draws = %+v, want none", recorder.draws)
+	if len(trace.Draws) != 0 {
+		t.Fatalf("non-indexed draws = %+v, want none", trace.Draws)
 	}
-	if recorder.vertexBufferBindings != 2 || recorder.indexBufferBindings != 2 {
-		t.Errorf("buffer bindings = vertex %d, index %d; want 2 each",
-			recorder.vertexBufferBindings, recorder.indexBufferBindings)
+	if len(trace.VertexBuffers) != 2 || len(trace.IndexBuffers) != 2 {
+		t.Errorf("buffer binds = vertex %d, index %d; want 2 each",
+			len(trace.VertexBuffers), len(trace.IndexBuffers))
 	}
-	if recorder.vertexBufferCreates != 1 || recorder.indexBufferCreates != 1 {
-		t.Errorf("buffer creations = vertex %d, index %d; want 1 each",
-			recorder.vertexBufferCreates, recorder.indexBufferCreates)
+	if v, i := bufferCreates(&trace, "g3d_vertex"), bufferCreates(&trace, "g3d_index"); v != 1 || i != 1 {
+		t.Errorf("buffer creations = vertex %d, index %d; want 1 each", v, i)
 	}
 	if len(renderer.geomIdxBufs) != 1 || len(renderer.geomIdxCounts) != 1 {
 		t.Errorf("indexed geometry was not cached")
