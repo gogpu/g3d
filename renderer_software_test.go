@@ -12,16 +12,15 @@ import (
 	"github.com/gogpu/gpucontext"
 	"github.com/gogpu/gputypes"
 	"github.com/gogpu/wgpu"
-	_ "github.com/gogpu/wgpu/hal/software"
+	"github.com/gogpu/wgpu/wgputest"
 )
 
-// softwareProvider is a gpucontext.DeviceProvider over wgpu's software
-// backend, the way gogpu hands its device to g3d. The adapter reports
-// DeviceTypeCPU, like lavapipe or llvmpipe do (g3d#47).
+// softwareProvider is a gpucontext.DeviceProvider over wgputest's software
+// device, the way gogpu hands its device to g3d. The device is a CPU adapter,
+// like lavapipe or llvmpipe do (g3d#47).
 type softwareProvider struct {
-	adapter *wgpu.Adapter
-	device  *wgpu.Device
-	format  gputypes.TextureFormat
+	device *wgpu.Device
+	format gputypes.TextureFormat
 }
 
 func (p *softwareProvider) Device() gpucontext.Device { return wgpu.DeviceToHandle(p.device) }
@@ -29,9 +28,12 @@ func (p *softwareProvider) Queue() gpucontext.Queue   { return wgpu.QueueToHandl
 func (p *softwareProvider) SurfaceFormat() gputypes.TextureFormat {
 	return p.format
 }
-func (p *softwareProvider) Adapter() gpucontext.Adapter { return wgpu.AdapterToHandle(p.adapter) }
+
+// Adapter is unused by g3d; wgputest does not expose the adapter behind its
+// software device, so this is the empty handle.
+func (p *softwareProvider) Adapter() gpucontext.Adapter { return gpucontext.Adapter{} }
 func (p *softwareProvider) AdapterInfo() gpucontext.AdapterInfo {
-	return gpucontext.AdapterInfo{Name: p.adapter.Info().Name, Type: gpucontext.AdapterTypeSoftware}
+	return gpucontext.AdapterInfo{Name: "wgputest-software", Type: gpucontext.AdapterTypeSoftware}
 }
 func (p *softwareProvider) Features() gputypes.Features { return 0 }
 func (p *softwareProvider) DownlevelCapabilities() gputypes.DownlevelCapabilities {
@@ -41,28 +43,34 @@ func (p *softwareProvider) DownlevelCapabilities() gputypes.DownlevelCapabilitie
 func newSoftwareProvider(t *testing.T, format gputypes.TextureFormat) *softwareProvider {
 	t.Helper()
 
+	device, _, cleanup, err := wgputest.NewSoftwareDevice()
+	if err != nil {
+		t.Fatalf("wgputest.NewSoftwareDevice: %v", err)
+	}
+	t.Cleanup(cleanup)
+
+	return &softwareProvider{device: device, format: format}
+}
+
+// TestRequestAdapterFallbackIsCPU pins what g3d#47 established: a fallback
+// adapter request yields a CPU adapter. Only the public wgpu API is used; the
+// software backend is in this test binary because wgputest imports it.
+func TestRequestAdapterFallbackIsCPU(t *testing.T) {
 	instance, err := wgpu.CreateInstance(nil)
 	if err != nil {
 		t.Fatalf("CreateInstance: %v", err)
 	}
-	t.Cleanup(instance.Release)
+	defer instance.Release()
 
 	adapter, err := instance.RequestAdapter(&wgpu.RequestAdapterOptions{ForceFallbackAdapter: true})
 	if err != nil {
 		t.Fatalf("RequestAdapter(ForceFallbackAdapter): %v", err)
 	}
-	t.Cleanup(adapter.Release)
+	defer adapter.Release()
+
 	if got := adapter.Info().DeviceType; got != gputypes.DeviceTypeCPU {
 		t.Fatalf("adapter device type = %v, want DeviceTypeCPU", got)
 	}
-
-	device, err := adapter.RequestDevice(nil)
-	if err != nil {
-		t.Fatalf("RequestDevice: %v", err)
-	}
-	t.Cleanup(device.Release)
-
-	return &softwareProvider{adapter: adapter, device: device, format: format}
 }
 
 // TestNewRendererAcceptsCPUAdapter: g3d renders on whatever device it is given;
