@@ -63,4 +63,7 @@ type Material interface {
 	// UniformData returns the material-specific uniform bytes for GPU upload.
 	// The byte layout must match the WGSL material uniform struct exactly.
 	UniformData() []byte
+
+	// Texture returns texture.
+	Texture() *Texture
 }

@@ -50,9 +50,13 @@ type Renderer struct {
 	// Grow-only pools for per-object GPU resources.
 	// Pools expand when more meshes are visible than the previous high-water mark.
 	// Buffers are updated via queue.WriteBuffer(), never recreated per-frame.
-	objectUniformBufs   []*wgpu.Buffer    // per-mesh model+normal matrix
-	materialUniformBufs []*wgpu.Buffer    // per-mesh material properties
-	objectBindGroups    []*wgpu.BindGroup // per-mesh bind group (group 1)
+	objectUniformBufs   []*wgpu.Buffer // per-mesh model+normal matrix
+	materialUniformBufs []*wgpu.Buffer // per-mesh material properties
+
+	textures     map[*Texture]*textureDescriptor
+	emptyTexture *textureDescriptor
+
+	objectBindGroups []*wgpu.BindGroup // per-mesh bind group (group 1)
 
 	// Cached geometry GPU buffers keyed by Geometry pointer identity.
 	// Vertex/index data is static, so buffers are created on first use and
@@ -82,6 +86,7 @@ func NewRenderer(provider gpucontext.DeviceProvider) (*Renderer, error) {
 		gpuState:    gpu.NewGPUState(),
 		renderList:  render.NewRenderList(),
 		depthFormat: gputypes.TextureFormatDepth24Plus,
+		textures:    make(map[*Texture]*textureDescriptor),
 	}
 
 	if err := r.gpuState.SetDeviceProvider(provider); err != nil {
@@ -109,6 +114,7 @@ func NewRendererFromDevice(
 		renderList:    render.NewRenderList(),
 		depthFormat:   gputypes.TextureFormatDepth24Plus,
 		surfaceFormat: surfaceFormat,
+		textures:      make(map[*Texture]*textureDescriptor),
 	}
 
 	if err := r.gpuState.SetDeviceDirect(device, queue); err != nil {
@@ -192,6 +198,22 @@ func (r *Renderer) RenderTo(
 	}
 	if err := r.validateRenderState(); err != nil {
 		return err
+	}
+	if r.emptyTexture == nil {
+		device := r.gpuState.Device()
+		tex, err := r.createTextureDescriptor(device, &Texture{
+			data:         []byte{0xff, 0xff, 0xff, 0xff},
+			width:        1,
+			height:       1,
+			magFilter:    gputypes.FilterModeLinear,
+			minFilter:    gputypes.FilterModeLinear,
+			addressModeU: gputypes.AddressModeClampToEdge,
+			addressModeV: gputypes.AddressModeClampToEdge,
+		})
+		if err != nil {
+			return fmt.Errorf("g3d: unable to create empty texture error: %w", err)
+		}
+		r.emptyTexture = tex
 	}
 
 	// Release bind groups from the previous frame. By the time a new frame
@@ -469,6 +491,11 @@ func (r *Renderer) recordDrawCall(
 		return fmt.Errorf("write material uniforms[%d]: %w", idx, err)
 	}
 
+	tex, err := r.getTextureDescriptor(device, mat.Texture())
+	if err != nil {
+		return fmt.Errorf("get texture descriptor: %w", err)
+	}
+
 	// Stale bind groups from the previous frame reference the same buffers with
 	// different content. Create a new bind group each frame and defer its release
 	// to the start of the next frame, when the GPU has finished.
@@ -483,6 +510,8 @@ func (r *Renderer) recordDrawCall(
 		Entries: []wgpu.BindGroupEntry{
 			{Binding: 0, Buffer: r.objectUniformBufs[idx], Size: uint64(len(objBytes))},
 			{Binding: 1, Buffer: r.materialUniformBufs[idx], Size: uint64(len(matBytes))},
+			{Binding: 2, TextureView: tex.view},
+			{Binding: 3, Sampler: tex.sampler},
 		},
 	})
 	if err != nil {
@@ -738,6 +767,16 @@ func (r *Renderer) releasePersistentResources() {
 		buf.Release()
 	}
 	r.materialUniformBufs = nil
+
+	// Release loaded textures.
+	if r.emptyTexture != nil {
+		r.emptyTexture.Release()
+		r.emptyTexture = nil
+	}
+
+	for _, descriptor := range r.textures {
+		descriptor.Release()
+	}
 
 	// Release cached geometry buffers.
 	for _, buf := range r.geomVertBufs {

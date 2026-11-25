@@ -17,6 +17,7 @@ type BasicMaterial struct {
 	opacity     float32
 	doubleSided bool
 	wireframe   bool
+	texture     *Texture
 }
 
 // NewBasicMaterial creates an unlit material with the given options.
@@ -72,4 +73,9 @@ func (m *BasicMaterial) UniformData() []byte {
 	binary.LittleEndian.PutUint32(buf[8:12], math.Float32bits(m.color.B))
 	binary.LittleEndian.PutUint32(buf[12:16], math.Float32bits(m.color.A*m.opacity))
 	return buf[:]
+}
+
+// Texture returns texture.
+func (m *BasicMaterial) Texture() *Texture {
+	return m.texture
 }

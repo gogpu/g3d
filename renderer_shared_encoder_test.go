@@ -67,7 +67,8 @@ func submits(recorder *wgputest.Recorder) int {
 
 func TestRenderToRejectsNilEncoder(t *testing.T) {
 	renderer, _, view, _ := newRenderToFixture(t)
-	err := renderer.RenderTo(nil, NewScene(), NewPerspectiveCamera(60, 1, 0.1, 100), view)
+	device := renderer.gpuState.Device()
+	err := renderer.RenderTo(device, nil, NewScene(), NewPerspectiveCamera(60, 1, 0.1, 100), view)
 	if err == nil {
 		t.Fatal("RenderTo(nil encoder) succeeded, want error")
 	}
@@ -82,7 +83,7 @@ func TestRenderToRecordsWithoutSubmitting(t *testing.T) {
 
 	scene := NewScene()
 	camera := NewPerspectiveCamera(60, 1, 0.1, 100)
-	if err := renderer.RenderTo(encoder, scene, camera, view); err != nil {
+	if err := renderer.RenderTo(device, encoder, scene, camera, view); err != nil {
 		encoder.DiscardEncoding()
 		t.Fatalf("RenderTo: %v", err)
 	}
