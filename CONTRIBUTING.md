@@ -74,6 +74,9 @@ go test -coverprofile=tmp/coverage.out ./...
 - One PR per feature
 - Clear description of what and why
 - Reference related issues
+- **Don't edit `CHANGELOG.md`.** The maintainer writes the entry under `[Unreleased]` with your credit
+  (`(#123, by @you)`) when merging, so entries are written once and in one voice — and no two PRs conflict
+  on the same `[Unreleased]` section. Write the user-visible summary in your PR description instead.
 
 ---
 
