@@ -36,7 +36,7 @@ g3d is a Pure Go 3D rendering library — not a game engine. It provides scene g
                              ┌──▼──┐┌──▼──┐┌──▼──┐┌───▼──┐┌──▼──┐
                              │ Vk  ││DX12 ││Metal││ GLES ││Soft │
                              └─────┘└─────┘└─────┘└──────┘└─────┘
-                                          wgpu/hal
+                                      wgpu internal/hal (wgpu-internal since v0.35)
 ```
 
 ## Package Structure
